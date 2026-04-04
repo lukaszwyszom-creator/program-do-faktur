@@ -1,0 +1,1 @@
+"""Integracja KSeF."""

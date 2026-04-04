@@ -1,0 +1,1 @@
+"""Aplikacja backendowa KSeF."""

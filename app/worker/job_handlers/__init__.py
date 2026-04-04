@@ -1,0 +1,1 @@
+"""Handlery zadan workera."""

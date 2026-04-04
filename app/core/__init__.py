@@ -1,0 +1,1 @@
+"""Moduły wspólne aplikacji."""

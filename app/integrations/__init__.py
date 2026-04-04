@@ -1,0 +1,1 @@
+"""Integracje z systemami zewnetrznymi."""
