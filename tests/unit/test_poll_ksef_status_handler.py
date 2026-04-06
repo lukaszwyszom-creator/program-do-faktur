@@ -165,3 +165,73 @@ class TestPollWaitingStatus:
         handler.handle(_make_payload())
 
         assert transmission.status == TransmissionStatus.SUCCESS
+
+
+class TestKSeFReferenceNumberCommit08:
+    """Commit 08: zapis i propagacja numeru KSeF po sukcesie."""
+
+    def test_success_propagates_ksef_number_to_invoice(self, handler: PollKSeFStatusJobHandler):
+        """Numer KSeF trafia do faktury (InvoiceORM) przez invoice_repo.update."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUBMITTED
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        invoice = _make_sending_invoice()
+        handler._invoice_repo.lock_for_update.return_value = invoice
+        handler._invoice_repo.update.return_value = invoice
+
+        status_result = MagicMock()
+        status_result.processing_code = 200
+        status_result.ksef_reference_number = "KSeF/001/2026/04"
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())
+
+        assert invoice.ksef_reference_number == "KSeF/001/2026/04"
+        handler._invoice_repo.update.assert_called_once()
+
+    def test_success_with_no_ksef_number_does_not_crash(self, handler: PollKSeFStatusJobHandler):
+        """KSeF zwrocil 200 bez numeru — nie rzucamy wyjatku, status SUCCESS."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUBMITTED
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        invoice = _make_sending_invoice()
+        handler._invoice_repo.lock_for_update.return_value = invoice
+        handler._invoice_repo.update.return_value = invoice
+
+        status_result = MagicMock()
+        status_result.processing_code = 200
+        status_result.ksef_reference_number = None
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())  # nie rzuca
+
+        assert transmission.status == TransmissionStatus.SUCCESS
+        assert transmission.ksef_reference_number is None
+        assert invoice.ksef_reference_number is None
+
+    def test_already_success_transmission_is_skipped(self, handler: PollKSeFStatusJobHandler):
+        """Idempotentnosc: ponowne wywolanie dla SUCCESS nie wywoluje klienta KSeF."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUCCESS
+        handler._transmission_repo.lock_for_update.return_value = transmission
+
+        handler.handle(_make_payload())
+
+        handler._ksef_client.get_invoice_status.assert_not_called()
+        handler._invoice_repo.update.assert_not_called()
+
+    def test_already_permanent_failure_is_skipped(self, handler: PollKSeFStatusJobHandler):
+        """Idempotentnosc: ponowne wywolanie dla FAILED_PERMANENT nie wywoluje klienta."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.FAILED_PERMANENT
+        handler._transmission_repo.lock_for_update.return_value = transmission
+
+        handler.handle(_make_payload())
+
+        handler._ksef_client.get_invoice_status.assert_not_called()

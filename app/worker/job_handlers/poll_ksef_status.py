@@ -49,6 +49,18 @@ class PollKSeFStatusJobHandler:
             )
             return
 
+        # Idempotentnosc: jesli transmisja juz zakonczona, pomijamy
+        if transmission.status in (
+            TransmissionStatus.SUCCESS,
+            TransmissionStatus.FAILED_PERMANENT,
+        ):
+            logger.info(
+                "poll_ksef_status: transmisja %s juz zakonczona (%s) — pomijam.",
+                transmission_id,
+                transmission.status,
+            )
+            return
+
         try:
             session_token = self._ksef_session_service.get_session_token()
             status_result = self._ksef_client.get_invoice_status(
@@ -76,6 +88,12 @@ class PollKSeFStatusJobHandler:
 
         if code == 200:
             # KSeF potwierdzil przetworzenie faktury
+            if status_result.ksef_reference_number is None:
+                logger.warning(
+                    "poll_ksef_status: KSeF zwrocil kod 200 bez ksefReferenceNumber"
+                    " dla transmisji %s.",
+                    transmission_id,
+                )
             transmission.status = TransmissionStatus.SUCCESS
             transmission.ksef_reference_number = status_result.ksef_reference_number
             transmission.finished_at = datetime.now(UTC)
@@ -83,6 +101,7 @@ class PollKSeFStatusJobHandler:
             invoice = self._invoice_repo.lock_for_update(transmission.invoice_id)
             if invoice is not None:
                 invoice.transition_to(InvoiceStatus.ACCEPTED)
+                invoice.ksef_reference_number = status_result.ksef_reference_number
                 self._invoice_repo.update(invoice.id, invoice)
 
         elif code in _PERMANENT_ERROR_CODES:

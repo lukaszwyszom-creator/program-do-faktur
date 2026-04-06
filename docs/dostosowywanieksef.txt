@@ -1196,7 +1196,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 07
 - [ ] 07.9 wykonane
 
 COMMIT 08 - Domkniecie wysylki: numer KSeF po sukcesie
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Po sukcesie przetwarzania zapisac numer KSeF.
 - Powiazac go z wynikiem transmisji i ekspozycja w modelu.
@@ -2053,6 +2053,10 @@ CHECKLISTA ZBIORCZA ETAP 0-4
   - [x] enums.py — semantyczne komentarze w TransmissionStatus
   - [x] 312/312 testow przechodzi (+9 nowych testow Commit 07)
 - [ ] Commit 08 wykonany
+  - [x] poll_ksef_status.py — idempotentnosc (guard SUCCESS/FAILED_PERMANENT)
+  - [x] poll_ksef_status.py — propagacja ksef_reference_number do Invoice
+  - [x] poll_ksef_status.py — warning gdy kod 200 bez numeru
+  - [x] 316/316 testow przechodzi (+4 nowe testy Commit 08)
 - [ ] Commit 09 wykonany
 - [ ] Commit 10 wykonany
 - [ ] Commit 11 wykonany
