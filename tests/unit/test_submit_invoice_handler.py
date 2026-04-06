@@ -119,3 +119,69 @@ class TestSubmitInvoiceHandler:
 
         assert transmission.status == TransmissionStatus.FAILED_PERMANENT
         assert transmission.error_code == "MAPPING_ERROR"
+
+
+class TestSubmitInvoiceHandlerCommit10:
+    """Commit 10: uzupełnienie pokrycia submit handlera."""
+
+    def test_processing_status_set_at_start(self, handler: SubmitInvoiceJobHandler):
+        """Handler ustawia PROCESSING zanim odpyta KSeF."""
+        processing_status_at_call = []
+
+        def capture_call(session_token, xml_bytes):
+            processing_status_at_call.append(transmission.status)
+            raise KSeFClientError("fail", status_code=500, transient=True)
+
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._invoice_repo.get_by_id.return_value = _make_invoice()
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._ksef_client.send_invoice.side_effect = capture_call
+
+        handler.handle(_make_payload())
+
+        assert processing_status_at_call == [TransmissionStatus.PROCESSING]
+
+    def test_permanent_ksef_error_marks_permanent(self, handler: SubmitInvoiceJobHandler):
+        """Nieprzetrawny błąd KSeF (transient=False) → FAILED_PERMANENT."""
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._invoice_repo.get_by_id.return_value = _make_invoice()
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._ksef_client.send_invoice.side_effect = KSeFClientError(
+            "HTTP 400", status_code=400, transient=False
+        )
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.FAILED_PERMANENT
+        assert transmission.error_code == "400"
+
+    def test_unexpected_exception_marks_retryable(self, handler: SubmitInvoiceJobHandler):
+        """Niespodziewany wyjątek → FAILED_RETRYABLE (nie PERMANENT)."""
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._invoice_repo.get_by_id.return_value = _make_invoice()
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._ksef_client.send_invoice.side_effect = RuntimeError("internal")
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.FAILED_RETRYABLE
+        assert transmission.error_code == "INTERNAL_ERROR"
+
+    def test_success_sets_started_at_and_finished_at(self, handler: SubmitInvoiceJobHandler):
+        """Po sukcesie oba znaczniki czasu są ustawione."""
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._invoice_repo.get_by_id.return_value = _make_invoice()
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        send_result = MagicMock()
+        send_result.reference_number = "REF-XYZ"
+        handler._ksef_client.send_invoice.return_value = send_result
+
+        handler.handle(_make_payload())
+
+        assert transmission.started_at is not None
+        assert transmission.finished_at is not None

@@ -1561,7 +1561,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 09
 - [ ] 09.8 wykonane
 
 COMMIT 10 - Testy workflow submit -> status -> numer KSeF -> UPO
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Dodac testy pozytywnej sciezki i bledow przejsciowych.
 - Sprawdzic retry i zachowanie po sukcesie koncowym.
@@ -2064,6 +2064,11 @@ CHECKLISTA ZBIORCZA ETAP 0-4
   - [x] upo_status: 'fetched' | 'failed' (brak numeru, pusty bytes, wyjatek)
   - [x] 321/321 testow przechodzi (+5 nowych testow Commit 09)
 - [ ] Commit 10 wykonany
+  - [x] 10.2: TestSubmitInvoiceHandlerCommit10 — PROCESSING na starcie, blád permanentny, wyjátek, znaczniki czasu
+  - [x] 10.4: TestKSeFClientGetInvoiceStatus, TestKSeFClientGetUPO — kontrakt + retry
+  - [x] 10.5: TestInvoiceTransmissionConsistencyCommit10 — spójnosć status faktury/transmisji
+  - [x] 10.6: tests/unit/test_ksef_workflow_e2e.py — 5 testów E2E (submit→poll→UPO)
+  - [x] 339/339 testów przechodzi (+18 nowych testów Commit 10)
 - [ ] Commit 11 wykonany
 - [ ] Commit 12 wykonany
 - [ ] Commit 13 wykonany

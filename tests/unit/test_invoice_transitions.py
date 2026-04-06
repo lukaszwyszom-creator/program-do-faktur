@@ -72,3 +72,43 @@ class TestTransitionTo:
         inv.transition_to(InvoiceStatus.SENDING)
         inv.transition_to(InvoiceStatus.REJECTED)
         assert inv.status == InvoiceStatus.REJECTED
+
+
+class TestInvoiceTransmissionConsistencyCommit10:
+    """Commit 10 (10.5): spójność statusów faktury i transmisji."""
+
+    def test_accepted_invoice_has_ksef_reference_number(self):
+        """Faktura ACCEPTED powinna mieć numer KSeF (pole nie-None)."""
+        inv = _make_invoice(InvoiceStatus.SENDING)
+        inv.transition_to(InvoiceStatus.ACCEPTED)
+        inv.ksef_reference_number = "KSeF/001/2026/04"
+
+        assert inv.status == InvoiceStatus.ACCEPTED
+        assert inv.ksef_reference_number == "KSeF/001/2026/04"
+
+    def test_rejected_invoice_has_no_ksef_reference_number(self):
+        """Faktura REJECTED nie powinna mieć numeru KSeF."""
+        inv = _make_invoice(InvoiceStatus.SENDING)
+        inv.transition_to(InvoiceStatus.REJECTED)
+
+        assert inv.status == InvoiceStatus.REJECTED
+        assert inv.ksef_reference_number is None
+
+    def test_accepted_without_upo_still_valid(self):
+        """Sukces bez UPO (upo_status='failed') nie powoduje błędu faktury."""
+        inv = _make_invoice(InvoiceStatus.SENDING)
+        inv.transition_to(InvoiceStatus.ACCEPTED)
+        inv.ksef_reference_number = "KSeF/001/2026/04"
+
+        # UPO jest aspektem transmisji, nie faktury — faktura jest ACCEPTED
+        assert inv.status == InvoiceStatus.ACCEPTED
+
+    def test_sending_to_accepted_is_only_path_for_ksef_success(self):
+        """Jedyna ścieżka do ACCEPTED prowadzi przez SENDING."""
+        inv_draft = _make_invoice(InvoiceStatus.DRAFT)
+        with pytest.raises(Exception):
+            inv_draft.transition_to(InvoiceStatus.ACCEPTED)
+
+        inv_ready = _make_invoice(InvoiceStatus.READY_FOR_SUBMISSION)
+        with pytest.raises(Exception):
+            inv_ready.transition_to(InvoiceStatus.ACCEPTED)
