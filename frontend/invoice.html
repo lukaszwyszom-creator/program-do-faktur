@@ -96,6 +96,9 @@
       ? transmissions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
       : null;
 
+    /* -- UPO available -- */
+    const upoAvailable = latestT && latestT.upo_status === "fetched";
+
     /* -- Action buttons -- */
     let actions = "";
 
@@ -111,6 +114,12 @@
       actions += `<button class="btn btn-danger" id="btn-retry" data-tid="${escHtml(latestT.id)}">
         Ponów wysyłkę (próba ${latestT.attempt_no})
       </button>`;
+    }
+
+    if (upoAvailable) {
+      actions += `<a class="btn btn-outline" href="${api.upoUrl(latestT.id)}" target="_blank" rel="noopener">
+        Pobierz UPO
+      </a>`;
     }
 
     /* -- Transmissions history -- */
@@ -134,6 +143,9 @@
               Wystawiona: ${escHtml(inv.issue_date)} &bull; Sprzedaż: ${escHtml(inv.sale_date)}
               &bull; Waluta: ${escHtml(inv.currency)}
             </div>
+            ${inv.ksef_reference_number ? `<div class="card-date" style="margin-top:4px;color:#155724;">
+              KSeF: <strong>${escHtml(inv.ksef_reference_number)}</strong>
+            </div>` : ""}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
             ${badgeHtml(inv.status)}

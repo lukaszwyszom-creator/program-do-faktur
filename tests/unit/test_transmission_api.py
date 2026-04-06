@@ -339,3 +339,74 @@ class TestInvoiceResponseKSeFNumber:
         assert res.status_code == 200
         body = res.json()
         assert body["ksef_reference_number"] is None
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/transmissions/{id}/upo  —  pobieranie UPO (Commit 12)
+# ---------------------------------------------------------------------------
+
+class TestDownloadUPO:
+    def test_returns_xml_bytes_when_fetched(self, client, mock_transmission_service):
+        upo_bytes = b"<?xml version='1.0'?><UPO><Ref>KSeF-2026-001</Ref></UPO>"
+        t = _make_transmission_orm(
+            status=TransmissionStatus.SUCCESS,
+            ksef_reference_number="KSeF-2026-001",
+            upo_status="fetched",
+        )
+        t.upo_xml = upo_bytes
+        mock_transmission_service.get_transmission.return_value = t
+
+        res = client.get(f"/api/v1/transmissions/{t.id}/upo")
+
+        assert res.status_code == 200
+        assert res.content == upo_bytes
+        assert "application/xml" in res.headers["content-type"]
+        assert "attachment" in res.headers["content-disposition"]
+        assert "UPO_KSeF-2026-001.xml" in res.headers["content-disposition"]
+
+    def test_returns_404_when_upo_not_fetched(self, client, mock_transmission_service):
+        t = _make_transmission_orm(
+            status=TransmissionStatus.WAITING_STATUS,
+            ksef_reference_number=None,
+            upo_status=None,
+        )
+        t.upo_xml = None
+        mock_transmission_service.get_transmission.return_value = t
+
+        res = client.get(f"/api/v1/transmissions/{t.id}/upo")
+
+        assert res.status_code == 404
+
+    def test_returns_404_when_upo_failed(self, client, mock_transmission_service):
+        t = _make_transmission_orm(
+            status=TransmissionStatus.SUCCESS,
+            ksef_reference_number="KSeF-2026-FAIL",
+            upo_status="failed",
+        )
+        t.upo_xml = None
+        mock_transmission_service.get_transmission.return_value = t
+
+        res = client.get(f"/api/v1/transmissions/{t.id}/upo")
+
+        assert res.status_code == 404
+
+    def test_returns_404_when_upo_xml_empty(self, client, mock_transmission_service):
+        """upo_status='fetched' ale plik pusty — traktujemy jak brak."""
+        t = _make_transmission_orm(
+            status=TransmissionStatus.SUCCESS,
+            ksef_reference_number="KSeF-2026-EMPTY",
+            upo_status="fetched",
+        )
+        t.upo_xml = b""
+        mock_transmission_service.get_transmission.return_value = t
+
+        res = client.get(f"/api/v1/transmissions/{t.id}/upo")
+
+        assert res.status_code == 404
+
+    def test_not_found_transmission_returns_404(self, client, mock_transmission_service):
+        mock_transmission_service.get_transmission.side_effect = NotFoundError("brak")
+
+        res = client.get(f"/api/v1/transmissions/{uuid4()}/upo")
+
+        assert res.status_code == 404

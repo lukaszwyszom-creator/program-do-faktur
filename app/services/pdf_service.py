@@ -24,6 +24,14 @@ def _esc(value: object) -> str:
     return escape(str(value)) if value is not None else ""
 
 
+def _ksef_section(invoice: InvoiceResponse) -> str:
+    if not invoice.ksef_reference_number:
+        return ""
+    return f"""<div style="margin-top:16px;padding:10px 14px;border:1px solid #c3e6cb;border-radius:6px;background:#d4edda;color:#155724;font-size:12px;">
+  <strong>KSeF</strong> &bull; Numer referencyjny: <code>{_esc(invoice.ksef_reference_number)}</code>
+</div>"""
+
+
 def render_invoice_html(invoice: InvoiceResponse) -> str:
     seller = invoice.seller_snapshot
     buyer = invoice.buyer_snapshot
@@ -155,6 +163,8 @@ def render_invoice_html(invoice: InvoiceResponse) -> str:
   <p>Razem VAT: <strong>{_esc(invoice.total_vat)} {_esc(invoice.currency)}</strong></p>
   <p class="total-gross">Do zapłaty: {_esc(invoice.total_gross)} {_esc(invoice.currency)}</p>
 </div>
+
+{_ksef_section(invoice)}
 
 </body>
 </html>"""

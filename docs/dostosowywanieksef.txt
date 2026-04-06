@@ -1868,7 +1868,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 11
 - [x] 11.5 wykonane (10 testów kontraktowych w test_transmission_api.py)
 
 COMMIT 12 - Ekspozycja UPO i czytelnego wyniku w UI/API
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Dodac pobieranie UPO z poziomu API.
 - Uczytelnic statusy i wynik procesu w UI lub w warstwie prezentacji.
@@ -1883,7 +1883,12 @@ Definition of done
 - Uzytkownik widzi efekt integracji i moze pobrac artefakty.
 
 Zrobione
--
+- 12.2: GET /transmissions/{id}/upo — raw XML, Content-Disposition, 404 gdy brak/blad/pusty
+- 12.4: pdf_service — sekcja KSeF z numerem referencyjnym w HTML faktury
+- 12.4: frontend/invoice.html — numer KSeF w naglowku, przycisk "Pobierz UPO"
+- 12.4: frontend/static/app.js — getKSeFStatus(), upoUrl()
+- 12.6: TestDownloadUPO (5 testow) w test_transmission_api.py
+- 354/354 testow przechodzi (+5 nowych testow Commit 12)
 
 ROZBICIE COMMIT 12 - TASKI TECHNICZNE DO ODHACZANIA
 
@@ -2073,7 +2078,15 @@ CHECKLISTA ZBIORCZA ETAP 0-4
   - [x] 10.6: tests/unit/test_ksef_workflow_e2e.py — 5 testów E2E (submit→poll→UPO)
   - [x] 339/339 testów przechodzi (+18 nowych testów Commit 10)
 - [ ] Commit 11 wykonany
-- [ ] Commit 12 wykonany
+  - [x] 11.2: upo_status w TransmissionResponse, nowy KSeFStatusResponse
+  - [x] 11.3: GET /transmissions/{id}/ksef-status (is_final, ksef_reference_number, upo_status)
+  - [x] 11.5: 10 testow kontraktowych (test_transmission_api.py)
+  - [x] 349/349 testow przechodzi (+10 nowych testow Commit 11)
+- [x] Commit 12 wykonany
+  - [x] 12.2: GET /transmissions/{id}/upo — raw XML z Content-Disposition
+  - [x] 12.4: pdf_service KSeF section, invoice.html numer + przycisk UPO, app.js upoUrl/getKSeFStatus
+  - [x] 12.6: TestDownloadUPO (5 testow)
+  - [x] 354/354 testow przechodzi (+5 nowych testow Commit 12)
 - [ ] Commit 13 wykonany
 
 UWAGA PRAKTYCZNA

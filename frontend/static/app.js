@@ -92,6 +92,11 @@ export const api = {
   listTransmissions: (invoiceId) =>
     apiFetch(`/transmissions/invoice/${invoiceId}`),
 
+  getKSeFStatus: (transmissionId) =>
+    apiFetch(`/transmissions/${transmissionId}/ksef-status`),
+
+  upoUrl: (transmissionId) => `${API_BASE}/transmissions/${transmissionId}/upo`,
+
   /* Payments */
   importPaymentsCsv: (formData) => {
     const token = getToken();
