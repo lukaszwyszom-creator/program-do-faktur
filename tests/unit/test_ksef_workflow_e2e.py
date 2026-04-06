@@ -65,9 +65,9 @@ def _make_submit_handler(session, transmission, invoice) -> SubmitInvoiceJobHand
         ksef_client=MagicMock(),
         ksef_session_service=MagicMock(),
     )
-    h._transmission_repo.lock_for_update.return_value = transmission
-    h._invoice_repo.get_by_id.return_value = invoice
-    h._ksef_session_service.get_session_token.return_value = "session-token-abc"
+    h._transmission_repo.lock_for_update.return_value = transmission  # type: ignore[attr-defined]
+    h._invoice_repo.get_by_id.return_value = invoice  # type: ignore[attr-defined]
+    h._ksef_session_service.get_session_token.return_value = "session-token-abc"  # type: ignore[attr-defined]
     return h
 
 
@@ -80,10 +80,10 @@ def _make_poll_handler(session, transmission, invoice) -> PollKSeFStatusJobHandl
         ksef_client=MagicMock(),
         ksef_session_service=MagicMock(),
     )
-    h._transmission_repo.lock_for_update.return_value = transmission
-    h._invoice_repo.lock_for_update.return_value = invoice
-    h._invoice_repo.update.return_value = invoice
-    h._ksef_session_service.get_session_token.return_value = "session-token-abc"
+    h._transmission_repo.lock_for_update.return_value = transmission  # type: ignore[attr-defined]
+    h._invoice_repo.lock_for_update.return_value = invoice  # type: ignore[attr-defined]
+    h._invoice_repo.update.return_value = invoice  # type: ignore[attr-defined]
+    h._ksef_session_service.get_session_token.return_value = "session-token-abc"  # type: ignore[attr-defined]
     return h
 
 
@@ -109,7 +109,7 @@ class TestKSeFWorkflowE2E:
         send_result = MagicMock()
         send_result.reference_number = "REF-E2E-001"
         send_result.processing_code = 200
-        submit_handler._ksef_client.send_invoice.return_value = send_result
+        submit_handler._ksef_client.send_invoice.return_value = send_result  # type: ignore[attr-defined]
 
         submit_handler.handle({
             "transmission_id": str(transmission_id),
@@ -118,15 +118,15 @@ class TestKSeFWorkflowE2E:
 
         assert transmission.status == TransmissionStatus.SUBMITTED
         assert transmission.external_reference == "REF-E2E-001"
-        submit_handler._job_repo.add.assert_called_once()
+        submit_handler._job_repo.add.assert_called_once()  # type: ignore[attr-defined]
 
         # --- KROK 2: Poll → SUCCESS ---
         poll_handler = _make_poll_handler(mock_session, transmission, invoice)
         status_result = MagicMock()
         status_result.processing_code = 200
         status_result.ksef_reference_number = "KSeF/001/2026/04"
-        poll_handler._ksef_client.get_invoice_status.return_value = status_result
-        poll_handler._ksef_client.get_upo.return_value = b"<UPO>xml</UPO>"
+        poll_handler._ksef_client.get_invoice_status.return_value = status_result  # type: ignore[attr-defined]
+        poll_handler._ksef_client.get_upo.return_value = b"<UPO>xml</UPO>"  # type: ignore[attr-defined]
 
         poll_handler.handle({
             "transmission_id": str(transmission_id),
@@ -154,7 +154,7 @@ class TestKSeFWorkflowE2E:
         # Pierwsze wywołanie: KSeF przetwarza (kod 100)
         waiting_result = MagicMock()
         waiting_result.processing_code = 100
-        poll_handler._ksef_client.get_invoice_status.return_value = waiting_result
+        poll_handler._ksef_client.get_invoice_status.return_value = waiting_result  # type: ignore[attr-defined]
 
         poll_handler.handle({
             "transmission_id": str(transmission_id),
@@ -162,15 +162,15 @@ class TestKSeFWorkflowE2E:
         })
 
         assert transmission.status == TransmissionStatus.WAITING_STATUS
-        poll_handler._job_repo.add.assert_called_once()
-        poll_handler._job_repo.reset_mock()
+        poll_handler._job_repo.add.assert_called_once()  # type: ignore[attr-defined]
+        poll_handler._job_repo.reset_mock()  # type: ignore[attr-defined]
 
         # Drugie wywołanie: sukces (kod 200)
         success_result = MagicMock()
         success_result.processing_code = 200
         success_result.ksef_reference_number = "KSeF/002/2026/04"
-        poll_handler._ksef_client.get_invoice_status.return_value = success_result
-        poll_handler._ksef_client.get_upo.return_value = b"<UPO>ok</UPO>"
+        poll_handler._ksef_client.get_invoice_status.return_value = success_result  # type: ignore[attr-defined]
+        poll_handler._ksef_client.get_upo.return_value = b"<UPO>ok</UPO>"  # type: ignore[attr-defined]
 
         poll_handler.handle({
             "transmission_id": str(transmission_id),
@@ -179,7 +179,7 @@ class TestKSeFWorkflowE2E:
 
         assert transmission.status == TransmissionStatus.SUCCESS
         assert invoice.status == InvoiceStatus.ACCEPTED
-        poll_handler._job_repo.add.assert_not_called()
+        poll_handler._job_repo.add.assert_not_called()  # type: ignore[attr-defined]
 
     def test_rejection_path(self, mock_session: MagicMock):
         """Ścieżka odrzucenia: poll → kod 400 → FAILED_PERMANENT + REJECTED."""
@@ -195,7 +195,7 @@ class TestKSeFWorkflowE2E:
         rej_result.processing_code = 400
         rej_result.processing_description = "Nieprawidłowa faktura"
         rej_result.ksef_reference_number = None
-        poll_handler._ksef_client.get_invoice_status.return_value = rej_result
+        poll_handler._ksef_client.get_invoice_status.return_value = rej_result  # type: ignore[attr-defined]
 
         poll_handler.handle({
             "transmission_id": str(transmission_id),
@@ -204,7 +204,7 @@ class TestKSeFWorkflowE2E:
 
         assert transmission.status == TransmissionStatus.FAILED_PERMANENT
         assert invoice.status == InvoiceStatus.REJECTED
-        poll_handler._ksef_client.get_upo.assert_not_called()
+        poll_handler._ksef_client.get_upo.assert_not_called()  # type: ignore[attr-defined]
 
     def test_upo_failure_does_not_revert_success(self, mock_session: MagicMock):
         """Awaria pobierania UPO nie wycofuje statusu SUCCESS ani numeru KSeF."""
@@ -219,8 +219,8 @@ class TestKSeFWorkflowE2E:
         status_result = MagicMock()
         status_result.processing_code = 200
         status_result.ksef_reference_number = "KSeF/003/2026/04"
-        poll_handler._ksef_client.get_invoice_status.return_value = status_result
-        poll_handler._ksef_client.get_upo.side_effect = Exception("UPO service down")
+        poll_handler._ksef_client.get_invoice_status.return_value = status_result  # type: ignore[attr-defined]
+        poll_handler._ksef_client.get_upo.side_effect = Exception("UPO service down")  # type: ignore[attr-defined]
 
         poll_handler.handle({
             "transmission_id": str(transmission_id),
@@ -239,7 +239,7 @@ class TestKSeFWorkflowE2E:
         transmission.invoice_id = invoice.id
 
         submit_handler = _make_submit_handler(mock_session, transmission, invoice)
-        submit_handler._ksef_client.send_invoice.side_effect = KSeFClientError(
+        submit_handler._ksef_client.send_invoice.side_effect = KSeFClientError(  # type: ignore[attr-defined]
             "HTTP 503", status_code=503, transient=True
         )
 
@@ -249,4 +249,4 @@ class TestKSeFWorkflowE2E:
         })
 
         assert transmission.status == TransmissionStatus.FAILED_RETRYABLE
-        submit_handler._job_repo.add.assert_not_called()
+        submit_handler._job_repo.add.assert_not_called()  # type: ignore[attr-defined]

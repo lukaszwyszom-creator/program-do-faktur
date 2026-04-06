@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+from collections.abc import Generator
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -73,7 +75,7 @@ def actor() -> AuthenticatedUser:
 
 
 @pytest.fixture()
-def client(mock_transmission_service, actor) -> TestClient:
+def client(mock_transmission_service, actor) -> Generator[TestClient, None, None]:
     from unittest import mock as _mock
     app.dependency_overrides[get_current_user] = lambda: actor
     app.dependency_overrides[get_transmission_service] = lambda: mock_transmission_service

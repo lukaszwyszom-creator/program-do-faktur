@@ -143,6 +143,8 @@ class InvoiceService:
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
                 invoice = self.invoice_repository.lock_for_update(invoice_id)
+                if invoice is None:
+                    raise NotFoundError(f"Faktura {invoice_id} nie istnieje.")
 
                 if not invoice.can_transition_to(InvoiceStatus.READY_FOR_SUBMISSION):
                     raise InvalidStatusTransitionError(
