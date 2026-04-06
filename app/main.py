@@ -1,24 +1,33 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routers.auth import router as auth_router
 from app.api.routers.contractors import router as contractors_router
+from app.api.routers.frontend import router as frontend_router
 from app.api.routers.health import router as health_router
 from app.api.routers.invoices import router as invoices_router
+from app.api.routers.ksef_session import router as ksef_session_router
+from app.api.routers.metrics import router as metrics_router
+from app.api.routers.payments import router as payments_router
 from app.api.routers.transmissions import router as transmissions_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.middleware import RequestIdMiddleware
 from app.persistence.db import session_scope
 from app.persistence.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 
+_FRONTEND_STATIC = Path(__file__).parent.parent / "frontend" / "static"
+
 
 @asynccontextmanager
 async def application_lifespan(_: FastAPI) -> AsyncIterator[None]:
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, alert_webhook_url=settings.alert_webhook_url)
 
     if settings.initial_admin_username and settings.initial_admin_password:
         with session_scope() as session:
@@ -35,17 +44,30 @@ def create_application() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
         debug=settings.debug,
-        version="0.1.0",
+        version=settings.app_version,
         lifespan=application_lifespan,
     )
 
+    application.add_middleware(RequestIdMiddleware)
     register_exception_handlers(application)
 
     application.include_router(health_router)
+    application.include_router(metrics_router)
+    application.include_router(frontend_router)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
     application.include_router(contractors_router, prefix=settings.api_v1_prefix)
     application.include_router(invoices_router, prefix=settings.api_v1_prefix)
     application.include_router(transmissions_router, prefix=settings.api_v1_prefix)
+    application.include_router(ksef_session_router, prefix=settings.api_v1_prefix)
+    application.include_router(payments_router, prefix=settings.api_v1_prefix)
+
+    # Statyczne pliki frontendu (CSS, JS)
+    if _FRONTEND_STATIC.exists():
+        application.mount(
+            "/ui/static",
+            StaticFiles(directory=_FRONTEND_STATIC),
+            name="frontend_static",
+        )
 
     return application
 

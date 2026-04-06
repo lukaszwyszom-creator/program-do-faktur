@@ -21,9 +21,27 @@ class ContractorLookupStatus(StrEnum):
 class InvoiceStatus(StrEnum):
     DRAFT = "draft"
     READY_FOR_SUBMISSION = "ready_for_submission"
-    SUBMITTED = "submitted"
+    SENDING = "sending"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+class InvoicePaymentStatus(StrEnum):
+    UNPAID = "unpaid"
+    PARTIALLY_PAID = "partially_paid"
+    PAID = "paid"
+
+
+class PaymentMatchStatus(StrEnum):
+    UNMATCHED = "unmatched"
+    MATCHED = "matched"
+    PARTIAL = "partial"
+    MANUAL_REVIEW = "manual_review"
+
+
+class PaymentMatchMethod(StrEnum):
+    AUTO = "auto"
+    MANUAL = "manual"
 
 
 class TransmissionStatus(StrEnum):

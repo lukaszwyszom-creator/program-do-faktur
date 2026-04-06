@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.core.utils import to_uuid
 from app.persistence.models.audit_log import AuditLog
 from app.persistence.repositories.audit_repository import AuditRepository
 
@@ -22,7 +23,7 @@ class AuditService:
         metadata: dict | None = None,
     ) -> AuditLog:
         audit_log = AuditLog(
-            actor_user_id=actor_user_id,
+            actor_user_id=to_uuid(actor_user_id),
             actor_role=actor_role,
             event_type=event_type,
             entity_type=entity_type,
