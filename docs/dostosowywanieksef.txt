@@ -1732,7 +1732,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 10
 - [ ] 10.7 wykonane
 
 COMMIT 11 - Ekspozycja numeru KSeF w API i modelach odpowiedzi
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Dodac numer KSeF do odpowiedzi API tam, gdzie ma sens biznesowy.
 - Upewnic sie, ze klient nie musi czytac surowej transmisji, by zobaczyc wynik KSeF.
@@ -1747,7 +1747,10 @@ Definition of done
 - Numer KSeF jest widoczny dla uzytkownika przez API.
 
 Zrobione
--
+- 11.2: upo_status dodany do TransmissionResponse + nowy KSeFStatusResponse
+- 11.3: GET /transmissions/{id}/ksef-status — is_final, ksef_reference_number, upo_status
+- 11.5: tests/unit/test_transmission_api.py (10 testow kontraktowych)
+- 349/349 testow przechodzi (+10 nowych Commit 11)
 
 ROZBICIE COMMIT 11 - TASKI TECHNICZNE DO ODHACZANIA
 
@@ -1858,11 +1861,11 @@ Zrobione
 -
 
 CHECKLISTA ZBIORCZA DLA COMMIT 11
-- [ ] 11.1 wykonane
-- [ ] 11.2 wykonane
-- [ ] 11.3 wykonane
-- [ ] 11.4 wykonane
-- [ ] 11.5 wykonane
+- [x] 11.1 wykonane (ksef_reference_number był już w schematach)
+- [x] 11.2 wykonane (upo_status w TransmissionResponse, KSeFStatusResponse)
+- [x] 11.3 wykonane (GET ksef-status endpoint)
+- [x] 11.4 wykonane (semantyka w docstringu KSeFStatusResponse + is_final)
+- [x] 11.5 wykonane (10 testów kontraktowych w test_transmission_api.py)
 
 COMMIT 12 - Ekspozycja UPO i czytelnego wyniku w UI/API
 Status: [ ]

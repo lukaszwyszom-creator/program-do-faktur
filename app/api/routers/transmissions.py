@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user, get_transmission_service
 from app.core.security import AuthenticatedUser
+from app.domain.enums import TransmissionStatus
 from app.schemas.transmission import (
+    KSeFStatusResponse,
     RetryTransmissionResponse,
     SubmitInvoiceResponse,
     TransmissionListResponse,
@@ -16,6 +18,8 @@ from app.schemas.transmission import (
 from app.services.transmission_service import TransmissionService
 
 router = APIRouter(prefix="/transmissions", tags=["transmissions"])
+
+_TERMINAL_STATUSES = {TransmissionStatus.SUCCESS, TransmissionStatus.FAILED_PERMANENT}
 
 
 @router.post("/submit/{invoice_id}", response_model=SubmitInvoiceResponse, status_code=202)
@@ -43,6 +47,30 @@ def retry_transmission(
         transmission_id=transmission.id,
         attempt_no=transmission.attempt_no,
         status=transmission.status,
+    )
+
+
+@router.get("/{transmission_id}/ksef-status", response_model=KSeFStatusResponse)
+def get_ksef_status(
+    transmission_id: UUID,
+    transmission_service: Annotated[TransmissionService, Depends(get_transmission_service)] = ...,
+    _: Annotated[AuthenticatedUser, Depends(get_current_user)] = ...,
+) -> KSeFStatusResponse:
+    """Zwięzły widok wyniku integracji KSeF.
+
+    Numer KSeF jest finalny wyłącznie gdy ``is_final=True`` i ``status='success'``.
+    Gdy ``upo_status`` jest ``null``, UPO nie zostało jeszcze pobrane lub transmisja
+    nie osiągnęła statusu success.
+    """
+    transmission = transmission_service.get_transmission(transmission_id)
+    status_value = transmission.status.value if hasattr(transmission.status, "value") else transmission.status
+    return KSeFStatusResponse(
+        transmission_id=transmission.id,
+        invoice_id=transmission.invoice_id,
+        status=status_value,
+        ksef_reference_number=transmission.ksef_reference_number,
+        upo_status=transmission.upo_status,
+        is_final=status_value in {s.value for s in _TERMINAL_STATUSES},
     )
 
 

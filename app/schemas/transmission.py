@@ -16,11 +16,28 @@ class TransmissionResponse(BaseModel):
     idempotency_key: str | None = None
     external_reference: str | None = None
     ksef_reference_number: str | None = None
+    upo_status: str | None = None
     error_code: str | None = None
     error_message: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime
+
+
+class KSeFStatusResponse(BaseModel):
+    """Zwięzły widok wyniku integracji KSeF dla danej transmisji.
+
+    Semantyka pól:
+    - ksef_reference_number: finalny numer KSeF (non-null tylko gdy status='success')
+    - upo_status:  'fetched' | 'failed' | None
+    - is_final:    True gdy status jest terminalny (success / failed_permanent)
+    """
+    transmission_id: UUID
+    invoice_id: UUID
+    status: str
+    ksef_reference_number: str | None
+    upo_status: str | None
+    is_final: bool
 
 
 class TransmissionListResponse(BaseModel):
