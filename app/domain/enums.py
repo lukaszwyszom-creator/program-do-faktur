@@ -45,13 +45,13 @@ class PaymentMatchMethod(StrEnum):
 
 
 class TransmissionStatus(StrEnum):
-    QUEUED = "queued"
-    PROCESSING = "processing"
-    SUBMITTED = "submitted"
-    WAITING_STATUS = "waiting_status"
-    SUCCESS = "success"
-    FAILED_RETRYABLE = "failed_retryable"
-    FAILED_PERMANENT = "failed_permanent"
+    QUEUED = "queued"                    # utworzono job, oczekuje na worker
+    PROCESSING = "processing"            # worker pobral zadanie i buduje XML
+    SUBMITTED = "submitted"              # XML przyjety przez API KSeF, oczekujemy na potwierdzenie
+    WAITING_STATUS = "waiting_status"    # polling odpytuje KSeF, wynik jeszcze nieznany
+    SUCCESS = "success"                  # KSeF potwierdzil przyjecie faktury (kod 200)
+    FAILED_RETRYABLE = "failed_retryable"  # blad przejsciowy, mozna ponowic
+    FAILED_PERMANENT = "failed_permanent"  # blad trwaly (blad mapowania, odrzucenie przez KSeF)
 
 
 class JobStatus(StrEnum):

@@ -965,7 +965,7 @@ Zrobione
 - 303/303 testow przechodzi
 
 COMMIT 07 - Porzadki w modelu transmisji i statusach workflow
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Uporzadkowac statusy techniczne transmisji.
 - Doprecyzowac, ktory moment jest "submitted", a ktory "success".
@@ -2048,6 +2048,10 @@ CHECKLISTA ZBIORCZA ETAP 0-4
 - [ ] Commit 05 wykonany
 - [ ] Commit 06 wykonany
 - [ ] Commit 07 wykonany
+  - [x] poll_ksef_status.py — usuniety duplikat, czysta wersja z WAITING_STATUS
+  - [x] transmission_service.py — bug: get_active_for_invoice(invoice_id, _ACTIVE_STATUSES)
+  - [x] enums.py — semantyczne komentarze w TransmissionStatus
+  - [x] 312/312 testow przechodzi (+9 nowych testow Commit 07)
 - [ ] Commit 08 wykonany
 - [ ] Commit 09 wykonany
 - [ ] Commit 10 wykonany

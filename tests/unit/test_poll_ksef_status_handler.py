@@ -120,3 +120,48 @@ class TestPollHandler:
         handler.handle(_make_payload())
 
         handler._job_repo.add.assert_called_once()
+
+
+class TestPollWaitingStatus:
+    """Commit 07: WAITING_STATUS oznacza 'oczekujemy na odpowiedz KSeF'."""
+
+    def test_other_code_sets_waiting_status(self, handler: PollKSeFStatusJobHandler):
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        status_result = MagicMock()
+        status_result.processing_code = 100  # KSeF przetwarza
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.WAITING_STATUS
+        handler._job_repo.add.assert_called_once()
+
+    def test_ksef_error_sets_waiting_status(self, handler: PollKSeFStatusJobHandler):
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._ksef_client.get_invoice_status.side_effect = KSeFClientError("timeout")
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.WAITING_STATUS
+        handler._job_repo.add.assert_called_once()
+
+    def test_code_200_does_not_set_waiting_status(self, handler: PollKSeFStatusJobHandler):
+        transmission = MagicMock()
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._invoice_repo.lock_for_update.return_value = _make_sending_invoice()
+
+        status_result = MagicMock()
+        status_result.processing_code = 200
+        status_result.ksef_reference_number = "KSEF-XYZ"
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.SUCCESS

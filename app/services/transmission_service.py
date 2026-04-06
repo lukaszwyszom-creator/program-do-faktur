@@ -62,7 +62,7 @@ class TransmissionService:
                 f"(aktualnie: '{invoice.status.value}')."
             )
 
-        active = self._transmission_repo.get_active_for_invoice(invoice_id)
+        active = self._transmission_repo.get_active_for_invoice(invoice_id, _ACTIVE_STATUSES)
         if active is not None:
             raise InvalidInvoiceError(
                 f"Faktura {invoice_id} ma już aktywną transmisję {active.id} "

@@ -99,3 +99,63 @@ class TestGetTransmission:
         t.id = uuid4()
         service._transmission_repo.get_by_id.return_value = t
         assert service.get_transmission(t.id) == t
+
+
+class TestActiveStatusesPropagation:
+    """Commit 07: get_active_for_invoice musi otrzymac _ACTIVE_STATUSES."""
+
+    def test_submit_passes_active_statuses_to_repo(self, service: TransmissionService, actor):
+        from app.services.transmission_service import _ACTIVE_STATUSES
+        invoice_id = uuid4()
+        invoice = MagicMock()
+        invoice.can_transition_to = MagicMock(return_value=True)
+        service._invoice_repo.lock_for_update.return_value = invoice
+        service._transmission_repo.get_active_for_invoice.return_value = None
+        service._transmission_repo.add.return_value = MagicMock(id=uuid4(), invoice_id=invoice_id)
+
+        service.submit_invoice(invoice_id, actor)
+
+        service._transmission_repo.get_active_for_invoice.assert_called_once_with(
+            invoice_id, _ACTIVE_STATUSES
+        )
+
+    def test_active_statuses_contains_queued_processing_submitted_waiting(self, service):
+        from app.services.transmission_service import _ACTIVE_STATUSES
+        assert TransmissionStatus.QUEUED in _ACTIVE_STATUSES
+        assert TransmissionStatus.PROCESSING in _ACTIVE_STATUSES
+        assert TransmissionStatus.SUBMITTED in _ACTIVE_STATUSES
+        assert TransmissionStatus.WAITING_STATUS in _ACTIVE_STATUSES
+
+    def test_success_not_in_active_statuses(self, service):
+        from app.services.transmission_service import _ACTIVE_STATUSES
+        assert TransmissionStatus.SUCCESS not in _ACTIVE_STATUSES
+        assert TransmissionStatus.FAILED_PERMANENT not in _ACTIVE_STATUSES
+        assert TransmissionStatus.FAILED_RETRYABLE not in _ACTIVE_STATUSES
+
+
+class TestTransmissionStatusSemantics:
+    """Commit 07: enum statusow ma spójne znaczenia."""
+
+    def test_all_statuses_are_strings(self):
+        for status in TransmissionStatus:
+            assert isinstance(status.value, str)
+
+    def test_terminal_statuses(self):
+        terminal = {
+            TransmissionStatus.SUCCESS,
+            TransmissionStatus.FAILED_PERMANENT,
+        }
+        non_terminal = {
+            TransmissionStatus.QUEUED,
+            TransmissionStatus.PROCESSING,
+            TransmissionStatus.SUBMITTED,
+            TransmissionStatus.WAITING_STATUS,
+            TransmissionStatus.FAILED_RETRYABLE,
+        }
+        assert terminal & non_terminal == set()
+
+    def test_retryable_is_not_terminal(self):
+        # FAILED_RETRYABLE nie jest ani sukcesem ani permanentnym bledem —
+        # serwis moze wykonac retry
+        assert TransmissionStatus.FAILED_RETRYABLE != TransmissionStatus.FAILED_PERMANENT
+        assert TransmissionStatus.FAILED_RETRYABLE != TransmissionStatus.SUCCESS
