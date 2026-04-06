@@ -1368,7 +1368,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 08
 - [ ] 08.7 wykonane
 
 COMMIT 09 - Domkniecie wysylki: pobranie i zapis UPO
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Pobierac UPO po sukcesie faktury.
 - Utrwalic UPO i jego status pobrania.
@@ -2058,6 +2058,11 @@ CHECKLISTA ZBIORCZA ETAP 0-4
   - [x] poll_ksef_status.py — warning gdy kod 200 bez numeru
   - [x] 316/316 testow przechodzi (+4 nowe testy Commit 08)
 - [ ] Commit 09 wykonany
+  - [x] TransmissionORM: upo_xml (LargeBinary) + upo_status (String 32)
+  - [x] migracja 0004 (transmission_upo)
+  - [x] poll_ksef_status.py: _fetch_and_save_upo() — awaria UPO nie cofa SUCCESS
+  - [x] upo_status: 'fetched' | 'failed' (brak numeru, pusty bytes, wyjatek)
+  - [x] 321/321 testow przechodzi (+5 nowych testow Commit 09)
 - [ ] Commit 10 wykonany
 - [ ] Commit 11 wykonany
 - [ ] Commit 12 wykonany

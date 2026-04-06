@@ -235,3 +235,104 @@ class TestKSeFReferenceNumberCommit08:
         handler.handle(_make_payload())
 
         handler._ksef_client.get_invoice_status.assert_not_called()
+
+
+class TestUPOCommit09:
+    """Commit 09: pobranie i zapis UPO po sukcesie numeru KSeF."""
+
+    def _make_success_setup(self, handler: PollKSeFStatusJobHandler):
+        """Pomocnik: ustawia handler w stan sukcesu z numerem KSeF."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUBMITTED
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        invoice = _make_sending_invoice()
+        handler._invoice_repo.lock_for_update.return_value = invoice
+        handler._invoice_repo.update.return_value = invoice
+
+        status_result = MagicMock()
+        status_result.processing_code = 200
+        status_result.ksef_reference_number = "KSeF/001/2026/04"
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        return transmission
+
+    def test_success_fetches_upo(self, handler: PollKSeFStatusJobHandler):
+        """Po sukcesie numer KSeF → wywolanie get_upo."""
+        transmission = self._make_success_setup(handler)
+        handler._ksef_client.get_upo.return_value = b"<UPO>tresc</UPO>"
+
+        handler.handle(_make_payload())
+
+        handler._ksef_client.get_upo.assert_called_once_with("tok", "KSeF/001/2026/04")
+        assert transmission.upo_xml == b"<UPO>tresc</UPO>"
+        assert transmission.upo_status == "fetched"
+
+    def test_success_upo_error_does_not_revert_ksef_number(self, handler: PollKSeFStatusJobHandler):
+        """Blad pobrania UPO nie cofa numeru KSeF ani statusu SUCCESS."""
+        transmission = self._make_success_setup(handler)
+        handler._ksef_client.get_upo.side_effect = Exception("timeout")
+
+        handler.handle(_make_payload())
+
+        # Status transmisji i numer KSeF zachowane
+        assert transmission.status == TransmissionStatus.SUCCESS
+        assert transmission.ksef_reference_number == "KSeF/001/2026/04"
+        # UPO oznaczone jako blad
+        assert transmission.upo_status == "failed"
+
+    def test_success_upo_empty_response_marks_failed(self, handler: PollKSeFStatusJobHandler):
+        """Puste bytes z UPO → upo_status='failed', nie crashuje, status SUCCESS zachowany."""
+        transmission = self._make_success_setup(handler)
+        handler._ksef_client.get_upo.return_value = b""
+
+        handler.handle(_make_payload())
+
+        assert transmission.upo_status == "failed"
+        assert transmission.status == TransmissionStatus.SUCCESS
+
+    def test_success_no_ksef_number_skips_upo(self, handler: PollKSeFStatusJobHandler):
+        """Bez numeru KSeF (kod 200 ale brak numeru) → upo_status='failed', no crash."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUBMITTED
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        invoice = _make_sending_invoice()
+        handler._invoice_repo.lock_for_update.return_value = invoice
+        handler._invoice_repo.update.return_value = invoice
+
+        status_result = MagicMock()
+        status_result.processing_code = 200
+        status_result.ksef_reference_number = None
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())
+
+        handler._ksef_client.get_upo.assert_not_called()
+        assert transmission.upo_status == "failed"
+
+    def test_code_400_does_not_fetch_upo(self, handler: PollKSeFStatusJobHandler):
+        """Blad permanentny → brak wywolania get_upo."""
+        transmission = MagicMock()
+        transmission.status = TransmissionStatus.SUBMITTED
+        transmission.invoice_id = uuid4()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+
+        invoice = _make_sending_invoice()
+        handler._invoice_repo.lock_for_update.return_value = invoice
+        handler._invoice_repo.update.return_value = invoice
+
+        status_result = MagicMock()
+        status_result.processing_code = 400
+        status_result.processing_description = "Bad request"
+        status_result.ksef_reference_number = None
+        handler._ksef_client.get_invoice_status.return_value = status_result
+
+        handler.handle(_make_payload())
+
+        handler._ksef_client.get_upo.assert_not_called()

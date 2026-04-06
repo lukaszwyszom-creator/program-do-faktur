@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,8 @@ class TransmissionORM(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), index=True)
     external_reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     ksef_reference_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    upo_xml: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    upo_status: Mapped[str | None] = mapped_column(String(32), nullable=True)  # pending | fetched | failed
     request_payload_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     response_payload_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)

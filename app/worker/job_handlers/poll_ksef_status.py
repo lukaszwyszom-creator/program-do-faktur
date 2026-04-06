@@ -104,6 +104,11 @@ class PollKSeFStatusJobHandler:
                 invoice.ksef_reference_number = status_result.ksef_reference_number
                 self._invoice_repo.update(invoice.id, invoice)
 
+            # Pobierz UPO — awaria nie cofa sukcesu faktury ani numeru KSeF
+            self._fetch_and_save_upo(
+                transmission, status_result.ksef_reference_number, session_token
+            )
+
         elif code in _PERMANENT_ERROR_CODES:
             # KSeF odrzucil fakture — blad permanentny
             transmission.status = TransmissionStatus.FAILED_PERMANENT
@@ -142,3 +147,49 @@ class PollKSeFStatusJobHandler:
             )
         )
         self.session.flush()
+
+    def _fetch_and_save_upo(
+        self,
+        transmission,
+        ksef_reference_number: str | None,
+        session_token: str,
+    ) -> None:
+        """Pobiera UPO z KSeF i zapisuje w transmisji.
+
+        Awaria pobierania UPO jest logowana i utrwalana jako upo_status='failed',
+        ale NIE wpływa na status transmisji ani status faktury (numer KSeF jest
+        już utrwalony jako SUCCESS przed wywołaniem tej metody).
+        """
+        if not ksef_reference_number:
+            logger.warning(
+                "poll_ksef_status: brak numeru KSeF — pomijam pobranie UPO."
+            )
+            transmission.upo_status = "failed"
+            return
+
+        try:
+            upo_bytes = self._ksef_client.get_upo(session_token, ksef_reference_number)
+        except Exception as exc:
+            logger.warning(
+                "poll_ksef_status: blad pobierania UPO dla %s: %s",
+                ksef_reference_number,
+                exc,
+            )
+            transmission.upo_status = "failed"
+            return
+
+        if not upo_bytes:
+            logger.warning(
+                "poll_ksef_status: KSeF zwrocil puste UPO dla %s.",
+                ksef_reference_number,
+            )
+            transmission.upo_status = "failed"
+            return
+
+        transmission.upo_xml = upo_bytes
+        transmission.upo_status = "fetched"
+        logger.info(
+            "poll_ksef_status: UPO pobrane dla %s (%d bajtow).",
+            ksef_reference_number,
+            len(upo_bytes),
+        )
