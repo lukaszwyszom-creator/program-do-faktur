@@ -46,6 +46,7 @@ class InvoiceMapper:
             created_by=orm.created_by,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
+            payment_status=orm.payment_status,
         )
 
     @staticmethod

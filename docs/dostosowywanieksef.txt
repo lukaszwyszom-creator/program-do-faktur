@@ -2032,7 +2032,7 @@ CHECKLISTA ZBIORCZA DLA COMMIT 12
 - [ ] 12.6 wykonane
 
 COMMIT 13 - Porzadki koncowe ETAP 0-4
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Uporzadkowac nazwy, komentarze i dokumentacje techniczna.
 - Usunac pozostalosci po FA(2), jesli jeszcze gdzies zostaly.
@@ -2049,35 +2049,35 @@ Zrobione
 -
 
 CHECKLISTA ZBIORCZA ETAP 0-4
-- [ ] Commit 01 wykonany
-- [ ] Commit 02 wykonany
-- [ ] Commit 03 wykonany
-- [ ] Commit 04 wykonany
-- [ ] Commit 05 wykonany
-- [ ] Commit 06 wykonany
-- [ ] Commit 07 wykonany
+- [x] Commit 01 wykonany
+- [x] Commit 02 wykonany
+- [x] Commit 03 wykonany
+- [x] Commit 04 wykonany
+- [x] Commit 05 wykonany
+- [x] Commit 06 wykonany
+- [x] Commit 07 wykonany
   - [x] poll_ksef_status.py — usuniety duplikat, czysta wersja z WAITING_STATUS
   - [x] transmission_service.py — bug: get_active_for_invoice(invoice_id, _ACTIVE_STATUSES)
   - [x] enums.py — semantyczne komentarze w TransmissionStatus
   - [x] 312/312 testow przechodzi (+9 nowych testow Commit 07)
-- [ ] Commit 08 wykonany
+- [x] Commit 08 wykonany
   - [x] poll_ksef_status.py — idempotentnosc (guard SUCCESS/FAILED_PERMANENT)
   - [x] poll_ksef_status.py — propagacja ksef_reference_number do Invoice
   - [x] poll_ksef_status.py — warning gdy kod 200 bez numeru
   - [x] 316/316 testow przechodzi (+4 nowe testy Commit 08)
-- [ ] Commit 09 wykonany
+- [x] Commit 09 wykonany
   - [x] TransmissionORM: upo_xml (LargeBinary) + upo_status (String 32)
   - [x] migracja 0004 (transmission_upo)
   - [x] poll_ksef_status.py: _fetch_and_save_upo() — awaria UPO nie cofa SUCCESS
   - [x] upo_status: 'fetched' | 'failed' (brak numeru, pusty bytes, wyjatek)
   - [x] 321/321 testow przechodzi (+5 nowych testow Commit 09)
-- [ ] Commit 10 wykonany
+- [x] Commit 10 wykonany
   - [x] 10.2: TestSubmitInvoiceHandlerCommit10 — PROCESSING na starcie, blád permanentny, wyjátek, znaczniki czasu
   - [x] 10.4: TestKSeFClientGetInvoiceStatus, TestKSeFClientGetUPO — kontrakt + retry
   - [x] 10.5: TestInvoiceTransmissionConsistencyCommit10 — spójnosć status faktury/transmisji
   - [x] 10.6: tests/unit/test_ksef_workflow_e2e.py — 5 testów E2E (submit→poll→UPO)
   - [x] 339/339 testów przechodzi (+18 nowych testów Commit 10)
-- [ ] Commit 11 wykonany
+- [x] Commit 11 wykonany
   - [x] 11.2: upo_status w TransmissionResponse, nowy KSeFStatusResponse
   - [x] 11.3: GET /transmissions/{id}/ksef-status (is_final, ksef_reference_number, upo_status)
   - [x] 11.5: 10 testow kontraktowych (test_transmission_api.py)
@@ -2087,7 +2087,11 @@ CHECKLISTA ZBIORCZA ETAP 0-4
   - [x] 12.4: pdf_service KSeF section, invoice.html numer + przycisk UPO, app.js upoUrl/getKSeFStatus
   - [x] 12.6: TestDownloadUPO (5 testow)
   - [x] 354/354 testow przechodzi (+5 nowych testow Commit 12)
-- [ ] Commit 13 wykonany
+- [x] Commit 13 wykonany
+  - [x] payment_status w Invoice domain + mapper + InvoiceResponse
+  - [x] docstring test_transmission_api.py zaktualizowany
+  - [x] brak pozostalosci FA(2) w app/ (zweryfikowane)
+  - [x] 355/355 testow przechodzi (+1 nowy test Commit 13)
 
 UWAGA PRAKTYCZNA
 - Jesli trzeba skrocic zakres, mozna zakonczyc po Commit 10 i traktowac Commit 11-12 jako kolejny mini-etap.

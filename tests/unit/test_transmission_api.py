@@ -1,4 +1,4 @@
-"""Testy kontraktowe API transmisji — Commit 11.
+"""Testy kontraktowe API transmisji — Commit 11 + 12.
 
 Strategia:
 - Nadpisujemy zależności DI przez app.dependency_overrides

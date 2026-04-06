@@ -201,6 +201,17 @@ class TestGetInvoice:
         assert UUID(body["id"]) == inv.id
         assert body["status"] == "draft"
 
+    def test_response_includes_payment_status(self, client, mock_invoice_service):
+        inv = _make_invoice(InvoiceStatus.ACCEPTED, "FV/2026/001")
+        mock_invoice_service.get_invoice.return_value = inv
+
+        res = client.get(f"/api/v1/invoices/{inv.id}")
+
+        assert res.status_code == 200
+        body = res.json()
+        assert "payment_status" in body
+        assert body["payment_status"] == "unpaid"  # default
+
     def test_not_found_returns_404(self, client, mock_invoice_service):
         from app.core.exceptions import NotFoundError
         mock_invoice_service.get_invoice.side_effect = NotFoundError("nie znaleziono")

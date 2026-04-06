@@ -50,6 +50,7 @@ class Invoice:
     number_local: str | None = None
     delivery_date: date | None = None
     ksef_reference_number: str | None = None
+    payment_status: str = "unpaid"
     created_by: UUID | None = None
 
     # -----------------------

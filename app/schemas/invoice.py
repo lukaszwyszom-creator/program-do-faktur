@@ -67,6 +67,7 @@ class InvoiceResponse(BaseModel):
     total_net: Decimal
     total_vat: Decimal
     total_gross: Decimal
+    payment_status: str = "unpaid"
     created_by: UUID | None = None
     created_at: datetime
     updated_at: datetime
@@ -88,6 +89,7 @@ class InvoiceResponse(BaseModel):
             total_net=invoice.total_net,
             total_vat=invoice.total_vat,
             total_gross=invoice.total_gross,
+            payment_status=invoice.payment_status,
             created_by=invoice.created_by,
             created_at=invoice.created_at,
             updated_at=invoice.updated_at,
