@@ -6,7 +6,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.domain.enums import InvoiceStatus
+from app.domain.enums import InvoiceStatus, InvoiceType
 from app.domain.models.invoice import Invoice, InvoiceItem
 from app.persistence.mappers.invoice_mapper import InvoiceMapper
 
@@ -45,6 +45,13 @@ def _make_invoice_orm():
     orm.created_at = datetime.now(UTC)
     orm.updated_at = datetime.now(UTC)
     orm.items = [_make_item_orm()]
+    orm.payment_status = "unpaid"
+    orm.delivery_date = None
+    orm.ksef_reference_number = None
+    orm.invoice_type = "VAT"
+    orm.correction_of_invoice_id = None
+    orm.correction_of_ksef_number = None
+    orm.correction_reason = None
     return orm
 
 

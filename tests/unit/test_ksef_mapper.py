@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from lxml import etree
 
-from app.domain.enums import InvoiceStatus
+from app.domain.enums import InvoiceStatus, InvoiceType
 from app.domain.models.invoice import Invoice, InvoiceItem
 from app.integrations.ksef.exceptions import KSeFMappingError
 from app.integrations.ksef.mapper import KSeFMapper, _NS_FA, _rate_key
@@ -339,8 +339,9 @@ class TestValidateXml:
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
         assert KSeFMapper.validate_xml(xml) is True
 
-    def test_invalid_xml_returns_false(self):
-        assert KSeFMapper.validate_xml(b"<not-closed>") is False
+    def test_invalid_xml_raises_mapping_error(self):
+        with pytest.raises(KSeFMappingError):
+            KSeFMapper.validate_xml(b"<not-closed>")
 
     def test_empty_bytes_returns_false(self):
         assert KSeFMapper.validate_xml(b"") is False
@@ -554,3 +555,273 @@ class TestMappingValidation:
     def test_mapping_error_is_ksef_error(self):
         from app.integrations.ksef.exceptions import KSeFError
         assert issubclass(KSeFMappingError, KSeFError)
+
+
+# ---------------------------------------------------------------------------
+# NOWE TESTY FA(3) — NIP, sumy, Adnotacje, RodzajFaktury, korekty
+# ---------------------------------------------------------------------------
+
+def _make_invoice_with_type(
+    invoice_type: InvoiceType,
+    correction_of_ksef_number: str | None = None,
+    correction_of_invoice_id=None,
+    correction_reason: str | None = None,
+    items: list[InvoiceItem] | None = None,
+) -> Invoice:
+    """Pomocnik do budowy faktury z określonym typem."""
+    now = datetime.now(UTC)
+    return Invoice(
+        id=uuid4(),
+        status=InvoiceStatus.READY_FOR_SUBMISSION,
+        issue_date=date(2026, 4, 5),
+        sale_date=date(2026, 4, 5),
+        currency="PLN",
+        number_local="FV/1/04/2026",
+        seller_snapshot={
+            "nip": "1234567890",
+            "name": "Sprzedawca Sp. z o.o.",
+            "street": "ul. Testowa",
+            "building_no": "1",
+            "postal_code": "00-001",
+            "city": "Warszawa",
+            "country": "PL",
+        },
+        buyer_snapshot={
+            "nip": "9876543210",
+            "name": "Nabywca Sp. z o.o.",
+            "street": "ul. Kupiecka",
+            "building_no": "2",
+            "postal_code": "30-002",
+            "city": "Kraków",
+            "country": "PL",
+        },
+        items=items or [_make_item()],
+        total_net=Decimal("100.00"),
+        total_vat=Decimal("23.00"),
+        total_gross=Decimal("123.00"),
+        created_at=now,
+        updated_at=now,
+        invoice_type=invoice_type,
+        correction_of_ksef_number=correction_of_ksef_number,
+        correction_of_invoice_id=correction_of_invoice_id,
+        correction_reason=correction_reason,
+    )
+
+
+class TestNIPValidation:
+    """Walidacja NIP — FA(3) wymaga dokładnie 10 cyfr."""
+
+    def test_valid_10_digit_nip_passes(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
+            "nip": "1234567890", "name": "Firma"
+        }))
+        assert xml is not None
+
+    def test_9_digit_nip_raises(self):
+        with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):
+            KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
+                "nip": "123456789", "name": "Firma"  # 9 cyfr
+            }))
+
+    def test_11_digit_nip_raises(self):
+        with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):
+            KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
+                "nip": "12345678901", "name": "Firma"  # 11 cyfr
+            }))
+
+    def test_nip_with_dashes_is_normalized(self):
+        """NIP ze spacjami/kreskami jest normalizowany do 10 cyfr — nie rzuca błędu."""
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
+            "nip": "123-456-78-90", "name": "Firma"  # kreski → normalizacja → 10 cyfr
+        }))
+        root = _parse_xml(xml)
+        nip_el = _text(root, "Podmiot1", "Sprzedawca", "NIP")
+        assert nip_el == "1234567890"
+
+    def test_nip_with_pl_prefix_passes(self):
+        """NIP z prefiksem PL powinien przejść po strippingu prefiksu."""
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
+            "nip": "PL1234567890", "name": "Firma"  # prefix PL
+        }))
+        root = _parse_xml(xml)
+        # NIP w XML powinien być sama liczba bez PL
+        nip_el = _text(root, "Podmiot1", "Sprzedawca", "NIP")
+        assert nip_el == "1234567890"
+
+    def test_missing_seller_nip_raises(self):
+        with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):
+            KSeFMapper.invoice_to_xml(
+                _make_invoice(seller_snapshot={"name": "Firma bez NIP"})
+            )
+
+
+class TestAdnotacje:
+    """Sekcja Adnotacje wymagana przez FA(3)."""
+
+    def test_adnotacje_section_present(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        adnotacje = _find(root, "Fa", "Adnotacje")
+        assert adnotacje is not None, "Sekcja Adnotacje powinna być obecna w FA(3)"
+
+    def test_p16_default_0(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "Adnotacje", "P_16") == "0"
+
+    def test_p17_default_0(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "Adnotacje", "P_17") == "0"
+
+    def test_p18_default_0(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "Adnotacje", "P_18") == "0"
+
+    def test_p18a_default_0(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "Adnotacje", "P_18A") == "0"
+
+
+class TestRodzajFakturyEnum:
+    """RodzajFaktury pobierane z invoice.invoice_type (nie hardcoded)."""
+
+    def test_default_vat(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "VAT"
+
+    def test_kor_type(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR,
+            correction_of_ksef_number="KSeF/2026/0001",
+            correction_reason="Błędna stawka VAT",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "KOR"
+
+    def test_zal_type(self):
+        inv = _make_invoice_with_type(InvoiceType.ZAL)
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "ZAL"
+
+    def test_roz_type(self):
+        inv = _make_invoice_with_type(InvoiceType.ROZ)
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "ROZ"
+
+    def test_upr_type(self):
+        inv = _make_invoice_with_type(InvoiceType.UPR)
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "UPR"
+
+    def test_kor_zal_type(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR_ZAL,
+            correction_of_ksef_number="KSeF/2026/0002",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "KOR_ZAL"
+
+    def test_kor_roz_type(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR_ROZ,
+            correction_of_ksef_number="KSeF/2026/0003",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "RodzajFaktury") == "KOR_ROZ"
+
+
+class TestKorekty:
+    """Faktury korygujące — element FaKorygowana w XML."""
+
+    def test_regular_invoice_has_no_fa_korygowana(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        root = _parse_xml(xml)
+        assert _find(root, "Fa", "FaKorygowana") is None
+
+    def test_kor_emits_fa_korygowana(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR,
+            correction_of_ksef_number="KSeF/2026/0001",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _find(root, "Fa", "FaKorygowana") is not None
+
+    def test_kor_ksef_number_in_xml(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR,
+            correction_of_ksef_number="KSeF/2026/0001",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "FaKorygowana", "NrKSeFFaKorygowanej") == "KSeF/2026/0001"
+
+    def test_kor_reason_in_xml(self):
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR,
+            correction_of_ksef_number="KSeF/2026/0001",
+            correction_reason="Błędna wartość pozycji 1",
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "FaKorygowana", "PrzyczynaKorekty") == "Błędna wartość pozycji 1"
+
+    def test_kor_without_ksef_number_raises(self):
+        """Korekta bez numeru KSeF lub ID loklanego faktury powinna zgłosić błąd."""
+        inv = _make_invoice_with_type(InvoiceType.KOR)
+        with pytest.raises(KSeFMappingError, match="korygująca"):
+            KSeFMapper.invoice_to_xml(inv)
+
+    def test_kor_with_local_id_passes(self):
+        """Korekta z correction_of_invoice_id (UUID) powinna przejść nawet bez numeru KSeF."""
+        local_id = uuid4()
+        inv = _make_invoice_with_type(
+            InvoiceType.KOR,
+            correction_of_invoice_id=local_id,
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        assert xml is not None
+
+    def test_kor_zal_requires_reference(self):
+        inv = _make_invoice_with_type(InvoiceType.KOR_ZAL)
+        with pytest.raises(KSeFMappingError, match="korygująca"):
+            KSeFMapper.invoice_to_xml(inv)
+
+
+class TestValidateXmlFa3:
+    """validate_xml rzuca KSeFMappingError przy syntax error."""
+
+    def test_valid_invoice_xml_passes(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        assert KSeFMapper.validate_xml(xml) is True
+
+    def test_malformed_xml_raises(self):
+        with pytest.raises(KSeFMappingError, match="składniowo"):
+            KSeFMapper.validate_xml(b"<not-closed>")
+
+    def test_empty_bytes_returns_false(self):
+        result = KSeFMapper.validate_xml(b"")
+        assert result is False
+
+
+class TestBackwardCompatAlias:
+    """KSeFMapper jest aliasem FA3Mapper — backward compat."""
+
+    def test_ksefmapper_is_fa3mapper(self):
+        from app.integrations.ksef.mapper import FA3Mapper, KSeFMapper
+        assert KSeFMapper is FA3Mapper
+
+    def test_schema_version_constant(self):
+        from app.integrations.ksef.mapper import FA3Mapper
+        assert FA3Mapper.SCHEMA_VERSION == "3"
+

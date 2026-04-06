@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.domain.enums import InvoiceStatus
+from app.domain.enums import InvoiceStatus, InvoiceType
 from app.domain.exceptions import InvalidInvoiceError, InvalidStatusTransitionError
 
 
@@ -51,6 +51,10 @@ class Invoice:
     delivery_date: date | None = None
     ksef_reference_number: str | None = None
     payment_status: str = "unpaid"
+    invoice_type: InvoiceType = InvoiceType.VAT
+    correction_of_invoice_id: UUID | None = None
+    correction_of_ksef_number: str | None = None
+    correction_reason: str | None = None
     created_by: UUID | None = None
 
     # -----------------------
@@ -99,3 +103,54 @@ class Invoice:
                 f"sort_order musi być ciągły od 1 do {len(orders)}, "
                 f"otrzymano: {sorted(orders)}"
             )
+
+    # -----------------------
+    # KSeF PRE-SEND VALIDATION
+    # -----------------------
+
+    def validate_for_ksef(self) -> None:
+        """Weryfikuje gotowość faktury do wysyłki do KSeF.
+
+        Sprawdza:
+        - NIP sprzedawcy i nabywcy (10 cyfr, bez separatorów)
+        - Spójność sum (total_net + total_vat == total_gross, tolerancja 0.01)
+        - Pola wymagane dla korekty
+        Raises:
+            InvalidInvoiceError
+        """
+        seller_nip = (self.seller_snapshot or {}).get("nip", "")
+        if not _is_valid_nip(seller_nip):
+            raise InvalidInvoiceError(
+                f"NIP sprzedawcy jest nieprawidłowy: '{seller_nip}'. "
+                "Wymagane dokładnie 10 cyfr bez separatorów."
+            )
+
+        buyer_nip = (self.buyer_snapshot or {}).get("nip")
+        if buyer_nip is not None and not _is_valid_nip(buyer_nip):
+            raise InvalidInvoiceError(
+                f"NIP nabywcy jest nieprawidłowy: '{buyer_nip}'. "
+                "Wymagane dokładnie 10 cyfr bez separatorów."
+            )
+
+        expected_gross = self.total_net + self.total_vat
+        if abs(expected_gross - self.total_gross) > Decimal("0.01"):
+            raise InvalidInvoiceError(
+                f"Niespójność sum: total_net ({self.total_net}) + "
+                f"total_vat ({self.total_vat}) = {expected_gross}, "
+                f"ale total_gross = {self.total_gross}."
+            )
+
+        if self.invoice_type in (InvoiceType.KOR, InvoiceType.KOR_ZAL, InvoiceType.KOR_ROZ):
+            if not self.correction_of_ksef_number and not self.correction_of_invoice_id:
+                raise InvalidInvoiceError(
+                    "Faktura korygująca wymaga correction_of_ksef_number lub "
+                    "correction_of_invoice_id."
+                )
+
+
+def _is_valid_nip(nip: str) -> bool:
+    """Zwraca True jeśli NIP to dokładnie 10 cyfr bez separatorów."""
+    if not nip:
+        return False
+    stripped = nip.strip().replace("-", "").replace(" ", "")
+    return stripped.isdigit() and len(stripped) == 10

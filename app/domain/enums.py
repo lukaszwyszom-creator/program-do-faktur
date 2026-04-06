@@ -26,6 +26,17 @@ class InvoiceStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class InvoiceType(StrEnum):
+    """Rodzaj faktury zgodny z polem RodzajFaktury w FA(3)."""
+    VAT = "VAT"           # Faktura VAT standardowa
+    KOR = "KOR"           # Faktura korygująca
+    ZAL = "ZAL"           # Faktura zaliczkowa
+    ROZ = "ROZ"           # Faktura rozliczająca
+    UPR = "UPR"           # Faktura uproszczona (≤450 zł)
+    KOR_ZAL = "KOR_ZAL"   # Korekta faktury zaliczkowej
+    KOR_ROZ = "KOR_ROZ"   # Korekta faktury rozliczającej
+
+
 class InvoicePaymentStatus(StrEnum):
     UNPAID = "unpaid"
     PARTIALLY_PAID = "partially_paid"

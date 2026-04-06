@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.enums import InvoiceType
 from app.domain.models.invoice import Invoice, InvoiceItem
 
 
@@ -22,6 +23,10 @@ class InvoiceCreateRequest(BaseModel):
     delivery_date: date | None = None
     currency: str = "PLN"
     items: list[InvoiceItemInput]
+    invoice_type: InvoiceType = InvoiceType.VAT
+    correction_of_invoice_id: UUID | None = None
+    correction_of_ksef_number: str | None = None
+    correction_reason: str | None = None
 
 
 class InvoiceItemResponse(BaseModel):
@@ -68,6 +73,10 @@ class InvoiceResponse(BaseModel):
     total_vat: Decimal
     total_gross: Decimal
     payment_status: str = "unpaid"
+    invoice_type: str = "VAT"
+    correction_of_invoice_id: UUID | None = None
+    correction_of_ksef_number: str | None = None
+    correction_reason: str | None = None
     created_by: UUID | None = None
     created_at: datetime
     updated_at: datetime
@@ -90,6 +99,10 @@ class InvoiceResponse(BaseModel):
             total_vat=invoice.total_vat,
             total_gross=invoice.total_gross,
             payment_status=invoice.payment_status,
+            invoice_type=invoice.invoice_type.value,
+            correction_of_invoice_id=invoice.correction_of_invoice_id,
+            correction_of_ksef_number=invoice.correction_of_ksef_number,
+            correction_reason=invoice.correction_reason,
             created_by=invoice.created_by,
             created_at=invoice.created_at,
             updated_at=invoice.updated_at,

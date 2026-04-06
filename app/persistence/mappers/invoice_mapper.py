@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
-from app.domain.enums import InvoiceStatus
+from app.domain.enums import InvoiceStatus, InvoiceType
 from app.domain.models.invoice import Invoice, InvoiceItem
 from app.persistence.models.contractor import ContractorORM
 from app.persistence.models.contractor_override import ContractorOverrideORM
@@ -47,6 +47,10 @@ class InvoiceMapper:
             created_at=orm.created_at,
             updated_at=orm.updated_at,
             payment_status=orm.payment_status,
+            invoice_type=InvoiceType(orm.invoice_type or "VAT"),
+            correction_of_invoice_id=orm.correction_of_invoice_id,
+            correction_of_ksef_number=orm.correction_of_ksef_number,
+            correction_reason=orm.correction_reason,
         )
 
     @staticmethod
@@ -63,6 +67,10 @@ class InvoiceMapper:
             delivery_date=invoice.delivery_date,
             ksef_reference_number=invoice.ksef_reference_number,
             currency=invoice.currency,
+            invoice_type=invoice.invoice_type.value,
+            correction_of_invoice_id=invoice.correction_of_invoice_id,
+            correction_of_ksef_number=invoice.correction_of_ksef_number,
+            correction_reason=invoice.correction_reason,
             created_by=invoice.created_by,
         )
         orm.items = [
@@ -83,6 +91,10 @@ class InvoiceMapper:
         orm.delivery_date = invoice.delivery_date
         orm.ksef_reference_number = invoice.ksef_reference_number
         orm.currency = invoice.currency
+        orm.invoice_type = invoice.invoice_type.value
+        orm.correction_of_invoice_id = invoice.correction_of_invoice_id
+        orm.correction_of_ksef_number = invoice.correction_of_ksef_number
+        orm.correction_reason = invoice.correction_reason
 
         # Synchronizacja pozycji — zastąpienie kolekcji.
         # Relacja ma cascade="all, delete-orphan", więc SQLAlchemy
