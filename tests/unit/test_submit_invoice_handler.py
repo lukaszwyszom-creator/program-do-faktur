@@ -11,6 +11,7 @@ import pytest
 from app.domain.enums import InvoiceStatus, TransmissionStatus
 from app.domain.models.invoice import Invoice, InvoiceItem
 from app.integrations.ksef.client import KSeFClientError
+from app.integrations.ksef.exceptions import KSeFMappingError
 from app.worker.job_handlers.submit_invoice import SubmitInvoiceJobHandler
 
 
@@ -103,3 +104,18 @@ class TestSubmitInvoiceHandler:
         assert transmission.status == TransmissionStatus.SUBMITTED
         assert transmission.external_reference == "REF-123"
         handler._job_repo.add.assert_called_once()
+
+    def test_mapping_error_marks_permanent(self, handler: SubmitInvoiceJobHandler):
+        """KSeFMappingError to błąd strukturalny — transmisja FAILED_PERMANENT."""
+        transmission = MagicMock()
+        handler._transmission_repo.lock_for_update.return_value = transmission
+        handler._invoice_repo.get_by_id.return_value = _make_invoice()
+        handler._ksef_session_service.get_session_token.return_value = "tok"
+        handler._ksef_client.send_invoice.side_effect = KSeFMappingError(
+            "Brak NIP sprzedawcy"
+        )
+
+        handler.handle(_make_payload())
+
+        assert transmission.status == TransmissionStatus.FAILED_PERMANENT
+        assert transmission.error_code == "MAPPING_ERROR"

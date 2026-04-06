@@ -8,6 +8,7 @@ from decimal import Decimal
 from lxml import etree
 
 from app.domain.models.invoice import Invoice
+from app.integrations.ksef.exceptions import KSeFMappingError
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class KSeFMapper:
 
     @staticmethod
     def invoice_to_xml(invoice: Invoice) -> bytes:
+        KSeFMapper._validate_invoice(invoice)
         root = etree.Element(f"{{{_NS_FA}}}Faktura", nsmap=_NS_MAP)
 
         # — Nagłówek
@@ -169,6 +171,24 @@ class KSeFMapper:
             _el(fa, p13, _fmt(net_by_rate[key]))
             if p14 is not None:
                 _el(fa, p14, _fmt(vat_by_rate[key]))
+
+    @staticmethod
+    def _validate_invoice(invoice: Invoice) -> None:
+        """Weryfikuje kontrakt adaptera KSeF przed budową XML.
+
+        Raises:
+            KSeFMappingError: gdy dokument byłby odrzucony przez KSeF
+                              z powodu brakujących danych krytycznych.
+        """
+        seller = invoice.seller_snapshot or {}
+        if not seller.get("nip"):
+            raise KSeFMappingError(
+                "Brak NIP sprzedawcy — pole wymagane przez KSeF (Podmiot1/NIP)"
+            )
+        if not invoice.items:
+            raise KSeFMappingError(
+                "Faktura nie zawiera pozycji — wymagany co najmniej jeden FaWiersz"
+            )
 
     @staticmethod
     def validate_xml(xml_bytes: bytes) -> bool:

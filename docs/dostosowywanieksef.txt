@@ -940,7 +940,7 @@ Zrobione
 - 52/52 testow mappera przechodzi, 298/298 calego suite
 
 COMMIT 06 - Walidacja XML i kontrakt adaptera KSeF
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Dodac lub zaostrzyc walidacje generowanego XML.
 - Uporzadkowac granice odpowiedzialnosci adaptera.
@@ -948,13 +948,21 @@ Zakres
 Pliki docelowe
 - app/integrations/ksef/mapper.py
 - app/integrations/ksef/exceptions.py
+- app/worker/job_handlers/submit_invoice.py
 - tests/unit/test_ksef_mapper.py
+- tests/unit/test_submit_invoice_handler.py
 
 Definition of done
 - Bledny dokument jest wykrywany przed wysylka lub w jasno opisanym punkcie workflow.
 
 Zrobione
--
+- _validate_invoice(): rzuca KSeFMappingError gdy brak NIP sprzedawcy lub brak pozycji
+- KSeFMappingError docstring: zaktualizowany na FA(3)
+- submit_invoice.py: except KSeFMappingError -> FAILED_PERMANENT z error_code MAPPING_ERROR
+- test_seller_no_nip_raises_mapping_error: zastepuje stary test_seller_no_nip_omitted
+- TestMappingValidation: 4 testy kontraktu adaptera (brak NIP, pusta lista pozycji, poprawna faktura)
+- TestSubmitInvoiceHandler.test_mapping_error_marks_permanent: nowy test
+- 303/303 testow przechodzi
 
 COMMIT 07 - Porzadki w modelu transmisji i statusach workflow
 Status: [ ]

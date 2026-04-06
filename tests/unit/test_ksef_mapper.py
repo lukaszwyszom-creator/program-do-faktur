@@ -10,6 +10,7 @@ from lxml import etree
 
 from app.domain.enums import InvoiceStatus
 from app.domain.models.invoice import Invoice, InvoiceItem
+from app.integrations.ksef.exceptions import KSeFMappingError
 from app.integrations.ksef.mapper import KSeFMapper, _NS_FA, _rate_key
 
 
@@ -235,12 +236,11 @@ class TestSellerSnapshot:
         country = _text(root, "Podmiot1", "Sprzedawca", "Adres", "KodKraju")
         assert country == "PL"
 
-    def test_seller_no_nip_omitted(self):
+    def test_seller_no_nip_raises_mapping_error(self):
+        # FA(3): brak NIP sprzedawcy jest błędem kontraktu adaptera
         seller = {"name": "Firma bez NIP", "city": "Wrocław"}
-        xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot=seller))
-        root = _parse_xml(xml)
-        nip_el = _find(root, "Podmiot1", "Sprzedawca", "NIP")
-        assert nip_el is None
+        with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):
+            KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot=seller))
 
 
 class TestBuyerSnapshot:
@@ -515,3 +515,42 @@ class TestExceptions:
         err = KSeFClientError("test", status_code=500, transient=True)
         assert str(err) == "test"
         assert err.transient is True
+
+
+class TestMappingValidation:
+    """Testy kontraktu adaptera — walidacja przed budową XML FA(3)."""
+
+    def test_missing_seller_nip_raises_mapping_error(self):
+        seller = {"name": "Firma bez NIP", "city": "Warszawa"}
+        with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):
+            KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot=seller))
+
+    def test_empty_items_raises_mapping_error(self):
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.READY_FOR_SUBMISSION,
+            issue_date=date(2026, 4, 5),
+            sale_date=date(2026, 4, 5),
+            currency="PLN",
+            number_local=None,
+            seller_snapshot={"nip": "1234567890", "name": "S"},
+            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            items=[],  # pusta lista — powinno rzucić KSeFMappingError
+            total_net=Decimal("0"),
+            total_vat=Decimal("0"),
+            total_gross=Decimal("0"),
+            created_at=now,
+            updated_at=now,
+        )
+        with pytest.raises(KSeFMappingError, match="pozycji"):
+            KSeFMapper.invoice_to_xml(inv)
+
+    def test_valid_invoice_does_not_raise(self):
+        # Pozytywny: poprawna faktura nie rzuca wyjątku
+        xml = KSeFMapper.invoice_to_xml(_make_invoice())
+        assert xml is not None
+
+    def test_mapping_error_is_ksef_error(self):
+        from app.integrations.ksef.exceptions import KSeFError
+        assert issubclass(KSeFMappingError, KSeFError)

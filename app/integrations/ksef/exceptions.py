@@ -4,7 +4,7 @@ Hierarchia wyjątków integracji KSeF.
 KSeFError
 ├── KSeFClientError      — błąd HTTP / sieciowy (w client.py, tu re-exportowany)
 ├── KSeFAuthError        — błąd autoryzacji (w auth.py, tu re-exportowany)
-├── KSeFMappingError     — błąd budowania XML z modelu faktury
+├── KSeFMappingError     — błąd budowania XML z modelu faktury (FA(3))
 └── KSeFSessionError     — sesja KSeF brakująca lub wygasła
 """
 
@@ -16,7 +16,7 @@ class KSeFError(Exception):
 
 
 class KSeFMappingError(KSeFError):
-    """Nie można zmapować modelu faktury do XML FA(2)."""
+    """Nie można zmapować modelu faktury do XML FA(3) — błąd kontraktu adaptera."""
 
 
 class KSeFSessionError(KSeFError):
