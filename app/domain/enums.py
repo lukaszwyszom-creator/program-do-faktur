@@ -37,6 +37,12 @@ class InvoiceType(StrEnum):
     KOR_ROZ = "KOR_ROZ"   # Korekta faktury rozliczającej
 
 
+class CorrectionType(StrEnum):
+    """Zakres korekty faktury."""
+    FULL = "full"       # korekta zerująca wszystkie pozycje (storno)
+    PARTIAL = "partial" # korekta wybranych pozycji lub wartości
+
+
 class InvoicePaymentStatus(StrEnum):
     UNPAID = "unpaid"
     PARTIALLY_PAID = "partially_paid"

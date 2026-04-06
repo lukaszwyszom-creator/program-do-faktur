@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.domain.enums import InvoiceStatus, InvoiceType
+from app.domain.enums import CorrectionType, InvoiceStatus, InvoiceType
 from app.domain.exceptions import InvalidInvoiceError, InvalidStatusTransitionError
 
 
@@ -16,6 +16,8 @@ _ALLOWED_TRANSITIONS: dict[InvoiceStatus, frozenset[InvoiceStatus]] = {
     InvoiceStatus.ACCEPTED: frozenset(),
     InvoiceStatus.REJECTED: frozenset(),
 }
+
+_CORRECTION_TYPES = frozenset({InvoiceType.KOR, InvoiceType.KOR_ZAL, InvoiceType.KOR_ROZ})
 
 
 @dataclass(slots=True)
@@ -30,6 +32,8 @@ class InvoiceItem:
     gross_total: Decimal
     sort_order: int = 0
     id: UUID | None = None
+    # kwota VAT przeliczona na PLN (wymagana przez FA(3) gdy currency != PLN)
+    vat_amount_pln: Decimal | None = None
 
 
 @dataclass(slots=True)
@@ -55,6 +59,20 @@ class Invoice:
     correction_of_invoice_id: UUID | None = None
     correction_of_ksef_number: str | None = None
     correction_reason: str | None = None
+    correction_type: CorrectionType | None = None
+    # Adnotacje FA(3)
+    use_split_payment: bool = False      # P_16 — mechanizm podzielonej płatności
+    self_billing: bool = False            # P_17 — samofakturowanie
+    reverse_charge: bool = False          # P_18 — odwrotne obciążenie
+    reverse_charge_art: bool = False      # P_18A — art. 17 ust.1 pkt 7 lub 8
+    reverse_charge_flag: bool = False     # P_18B — procedura odwrotnego obciążenia
+    cash_accounting_method: bool = False  # P_19 — metoda kasowa
+    # Waluta obca — kurs wymiany do PLN
+    exchange_rate: Decimal | None = None       # np. 4.2500
+    exchange_rate_date: date | None = None     # data kursu NBP
+    # Faktury zaliczkowe (ZAL/ROZ)
+    advance_amount: Decimal | None = None                       # kwota zaliczki (ZAL)
+    settled_advance_ids: list[UUID] = field(default_factory=list)  # UUID faktur ZAL (ROZ)
     created_by: UUID | None = None
 
     # -----------------------
@@ -65,10 +83,9 @@ class Invoice:
         return target in _ALLOWED_TRANSITIONS.get(self.status, frozenset())
 
     def transition_to(self, target: InvoiceStatus) -> None:
-        """Waliduje i wykonuje przejście statusu."""
         if not self.can_transition_to(target):
             raise InvalidStatusTransitionError(
-                f"Niedozwolone przejście: {self.status.value} \u2192 {target.value}"
+                f"Niedozwolone przejście: {self.status.value} → {target.value}"
             )
         self.status = target
 
@@ -77,12 +94,6 @@ class Invoice:
     # -----------------------
 
     def normalize_items_order(self) -> None:
-        """
-        Naprawia sort_order:
-        - sortuje stabilnie
-        - usuwa luki
-        - usuwa duplikaty poprzez reindex
-        """
         if not self.items:
             return
         sorted_items = sorted(self.items, key=lambda item: item.sort_order)
@@ -91,7 +102,6 @@ class Invoice:
         self.items = sorted_items
 
     def validate_items_order(self) -> None:
-        """Waliduje że sort_order jest unikalny i ciągły od 1."""
         if not self.items:
             return
         orders = [item.sort_order for item in self.items]
@@ -105,16 +115,20 @@ class Invoice:
             )
 
     # -----------------------
-    # KSeF PRE-SEND VALIDATION
+    # KSeF PRE-SEND VALIDATION (rozbite na typy)
     # -----------------------
 
     def validate_for_ksef(self) -> None:
-        """Weryfikuje gotowość faktury do wysyłki do KSeF.
+        """Główny walidator.  Deleguje do wyspecjalizowanych metod."""
+        self.validate_vat()
+        if self.invoice_type in _CORRECTION_TYPES:
+            self.validate_kor()
+        if self.invoice_type in (InvoiceType.ZAL, InvoiceType.ROZ):
+            self.validate_zal()
 
-        Sprawdza:
-        - NIP sprzedawcy i nabywcy (10 cyfr, bez separatorów)
-        - Spójność sum (total_net + total_vat == total_gross, tolerancja 0.01)
-        - Pola wymagane dla korekty
+    def validate_vat(self) -> None:
+        """Waliduje pola wymagane dla każdej faktury (NIP, sumy).
+
         Raises:
             InvalidInvoiceError
         """
@@ -140,16 +154,81 @@ class Invoice:
                 f"ale total_gross = {self.total_gross}."
             )
 
-        if self.invoice_type in (InvoiceType.KOR, InvoiceType.KOR_ZAL, InvoiceType.KOR_ROZ):
-            if not self.correction_of_ksef_number and not self.correction_of_invoice_id:
+        if self.currency != "PLN":
+            if self.exchange_rate is None:
                 raise InvalidInvoiceError(
-                    "Faktura korygująca wymaga correction_of_ksef_number lub "
-                    "correction_of_invoice_id."
+                    f"Faktura w walucie {self.currency} wymaga podania exchange_rate."
+                )
+            if self.exchange_rate <= Decimal("0"):
+                raise InvalidInvoiceError(
+                    f"exchange_rate musi być dodatnie, otrzymano: {self.exchange_rate}."
+                )
+            # Weryfikuj vat_amount_pln na pozycjach
+            for item in self.items:
+                if item.vat_amount_pln is None:
+                    raise InvalidInvoiceError(
+                        f"Pozycja '{item.name}' (sort_order={item.sort_order}) "
+                        "wymaga vat_amount_pln gdy currency != PLN."
+                    )
+
+    def validate_kor(self) -> None:
+        """Waliduje pola wymagane dla faktury korygującej.
+
+        Sprawdza:
+        - faktura bazowa ma status ACCEPTED
+        - faktura bazowa ma numer KSeF
+        - correction_reason podany
+        - correction_type podany
+
+        Raises:
+            InvalidInvoiceError
+        """
+        if not self.correction_of_ksef_number and not self.correction_of_invoice_id:
+            raise InvalidInvoiceError(
+                "Faktura korygująca wymaga correction_of_ksef_number lub "
+                "correction_of_invoice_id."
+            )
+        if not self.correction_reason:
+            raise InvalidInvoiceError(
+                "Faktura korygująca wymaga podania correction_reason."
+            )
+        if self.correction_type is None:
+            raise InvalidInvoiceError(
+                "Faktura korygująca wymaga podania correction_type (FULL lub PARTIAL)."
+            )
+
+    def validate_zal(self) -> None:
+        """Waliduje pola wymagane dla faktury zaliczkowej (ZAL) i rozliczającej (ROZ).
+
+        Sprawdza:
+        - ZAL: advance_amount > 0 i <= total_gross
+        - ROZ: settled_advance_ids niepusta;
+               suma zaliczek <= total_gross faktury rozliczającej
+
+        Raises:
+            InvalidInvoiceError
+        """
+        if self.invoice_type == InvoiceType.ZAL:
+            if self.advance_amount is None or self.advance_amount <= Decimal("0"):
+                raise InvalidInvoiceError(
+                    "Faktura zaliczkowa wymaga advance_amount > 0."
+                )
+            if self.advance_amount > self.total_gross:
+                raise InvalidInvoiceError(
+                    f"advance_amount ({self.advance_amount}) nie może być większy "
+                    f"niż total_gross ({self.total_gross})."
+                )
+
+        elif self.invoice_type == InvoiceType.ROZ:
+            if not self.settled_advance_ids:
+                raise InvalidInvoiceError(
+                    "Faktura rozliczająca wymaga podania settled_advance_ids "
+                    "(listy UUID faktur ZAL)."
                 )
 
 
 def _is_valid_nip(nip: str) -> bool:
-    """Zwraca True jeśli NIP to dokładnie 10 cyfr bez separatorów."""
+    """Zwraca True jeśli NIP to dokładnie 10 cyfr (po normalizacji)."""
     if not nip:
         return False
     stripped = nip.strip().replace("-", "").replace(" ", "")

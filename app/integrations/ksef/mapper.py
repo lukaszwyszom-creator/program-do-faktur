@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -32,7 +33,14 @@ _VAT_RATE_FIELDS: dict[str, tuple[str, str | None]] = {
     "np": ("P_13_7", None),
 }
 
-# Verja schema dla FA — nie hardcodujemy wewnątrz logiki budowy XML
+# Mapowanie stawki VAT na pole P_14_xW (kwota VAT w PLN przy kursie NBP)
+_VAT_RATE_FIELDS_PLN: dict[str, str] = {
+    "23": "P_14_1W",
+    "8":  "P_14_2W",
+    "5":  "P_14_3W",
+    "0":  "P_14_4W",
+}
+
 _SCHEMA_VERSION = "3"
 _SCHEMA_CODE = "FA"
 
@@ -67,7 +75,7 @@ def _strip_nip_prefix(nip: str) -> str:
 
 
 def _normalize_nip(raw_nip: str) -> str:
-    """Zwraca NIP jako 10 cyfr — usuwa kresk, spacje i opcjonalny prefix kraju."""
+    """Zwraca NIP jako 10 cyfr — usuwa kreski, spacje i opcjonalny prefix kraju."""
     stripped = _strip_nip_prefix(raw_nip.strip())
     return stripped.replace("-", "").replace(" ", "")
 
@@ -120,13 +128,19 @@ class FA3Mapper:
         if invoice.number_local is not None:
             _el(fa, "P_2", invoice.number_local)
 
+        # Kurs wymiany dla walut obcych (FA(3): KursWaluty i DataKursuWaluty)
+        if invoice.currency != "PLN" and invoice.exchange_rate is not None:
+            _el(fa, "KursWaluty", _fmt(invoice.exchange_rate))
+            if invoice.exchange_rate_date is not None:
+                _el(fa, "DataKursuWaluty", invoice.exchange_rate_date.isoformat())
+
         # Sumy per stawka VAT
         FA3Mapper._build_vat_totals(fa, invoice)
 
         _el(fa, "P_15", _fmt(invoice.total_gross))
         _el(fa, "RodzajFaktury", invoice.invoice_type.value)
 
-        # — Adnotacje (wymagane w FA(3), domyślnie wszystkie flagi = 0)
+        # — Adnotacje (wymagane w FA(3), flagi z modelu Invoice)
         FA3Mapper._build_adnotacje(fa, invoice)
 
         # — FaKorygowana (dla korekty)
@@ -145,6 +159,26 @@ class FA3Mapper:
             _el(row, "P_12", _fmt(item.vat_rate))
 
         return etree.tostring(root, encoding="UTF-8", xml_declaration=True)
+
+    @staticmethod
+    def xml_content_hash(xml_bytes: bytes) -> str:
+        """Zwraca SHA-256 kanonicznego (C14N) reprezentacji XML.
+
+        Użyj jako idempotency_key transmisji zamiast ``uuid4()``.
+        C14N eliminuje różnice w kolejności atrybutów, whitespace itp.
+        """
+        import io
+
+        if not xml_bytes:
+            raise KSeFMappingError("Pusty XML — nie można wyliczyć hasha.")
+        try:
+            root = etree.fromstring(xml_bytes)
+        except etree.XMLSyntaxError as exc:
+            raise KSeFMappingError(f"XML nie jest poprawny składniowo: {exc}") from exc
+
+        buf = io.BytesIO()
+        root.getroottree().write_c14n(buf)
+        return hashlib.sha256(buf.getvalue()).hexdigest()
 
     @staticmethod
     def validate_xml(xml_bytes: bytes) -> bool:
@@ -207,11 +241,9 @@ class FA3Mapper:
         wrapper = _el(root, wrapper_tag)
         party = _el(wrapper, party_tag)
 
-        # NIP — normalizacja do 10 cyfr (usunięcie prefiksu PL, kresek, spacji)
         raw_nip = snapshot.get("nip") or ""
         country_code = snapshot.get("country") or "PL"
         if raw_nip:
-            # Zachowaj KodKraju jeśli NIP miał prefix alfa
             if raw_nip.strip()[:2].isalpha():
                 country_code = raw_nip.strip()[:2].upper()
             pure_nip = _normalize_nip(raw_nip)
@@ -234,8 +266,10 @@ class FA3Mapper:
 
     @staticmethod
     def _build_vat_totals(fa: etree._Element, invoice: Invoice) -> None:
-        """Emituje pola P_13_x / P_14_x pogrupowane wg stawki VAT."""
+        """Emituje pola P_13_x / P_14_x (i P_14_xW dla walut obcych)."""
         items = invoice.items
+        is_foreign = invoice.currency != "PLN"
+
         if not items:
             _el(fa, "P_13_1", _fmt(invoice.total_net))
             _el(fa, "P_14_1", _fmt(invoice.total_vat))
@@ -243,10 +277,14 @@ class FA3Mapper:
 
         net_by_rate: dict[str, Decimal] = defaultdict(Decimal)
         vat_by_rate: dict[str, Decimal] = defaultdict(Decimal)
+        vat_pln_by_rate: dict[str, Decimal] = defaultdict(Decimal)
+
         for item in items:
             key = _rate_key(item.vat_rate)
             net_by_rate[key] += item.net_total
             vat_by_rate[key] += item.vat_total
+            if is_foreign and item.vat_amount_pln is not None:
+                vat_pln_by_rate[key] += item.vat_amount_pln
 
         for key in sorted(net_by_rate):
             fields = _VAT_RATE_FIELDS.get(key)
@@ -259,21 +297,23 @@ class FA3Mapper:
             _el(fa, p13, _fmt(net_by_rate[key]))
             if p14 is not None:
                 _el(fa, p14, _fmt(vat_by_rate[key]))
+                # P_14_xW — kwota VAT w PLN (wymagana gdy currency != PLN)
+                if is_foreign:
+                    p14w = _VAT_RATE_FIELDS_PLN.get(key)
+                    if p14w and vat_pln_by_rate.get(key):
+                        _el(fa, p14w, _fmt(vat_pln_by_rate[key]))
 
     @staticmethod
     def _build_adnotacje(fa: etree._Element, invoice: Invoice) -> None:
-        """Emituje sekcję Adnotacje wymaganą przez FA(3).
-
-        Domyślnie wszystkie flagi = 0 (faktura standardowa bez adnotacji).
-        Rozszerzenia (MPP = P_16=1, procedury = P_17–P_18B) mogą być
-        dodane przez podklasę lub przez dedykowane pola w Invoice.
-        """
+        """Emituje sekcję Adnotacje z dynamicznych flag Invoice."""
         adnotacje = _el(fa, "Adnotacje")
-        _el(adnotacje, "P_16", "0")   # mechanizm podzielonej płatności (MPP)
-        _el(adnotacje, "P_17", "0")   # samofakturowanie
-        _el(adnotacje, "P_18", "0")   # odwrotne obciążenie
-        _el(adnotacje, "P_18A", "0")  # art. 17 ust. 1 pkt 7 lub 8 ustawy
-        # P_19 (informacja o metodzie kasowej) — nie emitujemy jeśli brak
+        _el(adnotacje, "P_16", "1" if invoice.use_split_payment else "0")
+        _el(adnotacje, "P_17", "1" if invoice.self_billing else "0")
+        _el(adnotacje, "P_18", "1" if invoice.reverse_charge else "0")
+        _el(adnotacje, "P_18A", "1" if invoice.reverse_charge_art else "0")
+        _el(adnotacje, "P_18B", "1" if invoice.reverse_charge_flag else "0")
+        if invoice.cash_accounting_method:
+            _el(adnotacje, "P_19", "1")
 
     @staticmethod
     def _build_fa_korygowana(fa: etree._Element, invoice: Invoice) -> None:

@@ -62,7 +62,10 @@ class PollKSeFStatusJobHandler:
             return
 
         try:
-            session_token = self._ksef_session_service.get_session_token()
+            # Pobierz NIP sprzedawcy z faktury powiązanej z transmisją
+            invoice = self._invoice_repo.get_by_id(transmission.invoice_id)
+            seller_nip = (invoice.seller_snapshot if invoice else {}).get("nip", "") if invoice else ""
+            session_token = self._ksef_session_service.get_session_token(seller_nip) if seller_nip else self._ksef_session_service.get_session_token("")
             status_result = self._ksef_client.get_invoice_status(
                 session_token, reference_number
             )

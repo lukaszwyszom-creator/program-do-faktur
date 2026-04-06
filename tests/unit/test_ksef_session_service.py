@@ -83,11 +83,12 @@ class TestGetActiveSession:
         mock_session.execute.return_value = mock_result
 
         with pytest.raises(NotFoundError, match="Brak aktywnej"):
-            service.get_active_session()
+            service.get_active_session("1234567890")
 
     def test_expired_session_raises(self, service: KSeFSessionService, mock_session: MagicMock):
         orm = MagicMock()
         orm.status = SESSION_ACTIVE
+        orm.nip = "1234567890"
         orm.expires_at = datetime.now(UTC) - timedelta(minutes=10)
 
         mock_result = MagicMock()
@@ -95,7 +96,7 @@ class TestGetActiveSession:
         mock_session.execute.return_value = mock_result
 
         with pytest.raises(NotFoundError, match="wygasła"):
-            service.get_active_session()
+            service.get_active_session("1234567890")
         assert orm.status == SESSION_EXPIRED
 
 
@@ -104,24 +105,26 @@ class TestGetSessionToken:
         orm = MagicMock()
         orm.expires_at = datetime.now(UTC) + timedelta(hours=1)
         orm.token_metadata_json = {"session_token": "tok-123"}
+        orm.nip = "1234567890"
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = orm
         mock_session.execute.return_value = mock_result
 
-        assert service.get_session_token() == "tok-123"
+        assert service.get_session_token("1234567890") == "tok-123"
 
     def test_no_token_in_metadata_raises(self, service: KSeFSessionService, mock_session: MagicMock):
         orm = MagicMock()
         orm.expires_at = datetime.now(UTC) + timedelta(hours=1)
         orm.token_metadata_json = {}
+        orm.nip = "1234567890"
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = orm
         mock_session.execute.return_value = mock_result
 
         with pytest.raises(AppError, match="tokenu"):
-            service.get_session_token()
+            service.get_session_token("1234567890")
 
 
 class TestCloseSession:
@@ -130,12 +133,13 @@ class TestCloseSession:
         orm.expires_at = datetime.now(UTC) + timedelta(hours=1)
         orm.token_metadata_json = {"session_token": "tok"}
         orm.session_reference = "ref"
+        orm.nip = "1234567890"
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = orm
         mock_session.execute.return_value = mock_result
 
-        result = service.close_session()
+        result = service.close_session("1234567890")
         assert result.status == SESSION_TERMINATED
         auth_provider.terminate_session.assert_called_once_with("tok")
 

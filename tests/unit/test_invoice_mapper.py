@@ -23,6 +23,7 @@ def _make_item_orm():
     orm.vat_amount = Decimal("115.00")
     orm.gross_amount = Decimal("615.00")
     orm.sort_order = 1
+    orm.vat_amount_pln = None
     return orm
 
 
@@ -52,6 +53,17 @@ def _make_invoice_orm():
     orm.correction_of_invoice_id = None
     orm.correction_of_ksef_number = None
     orm.correction_reason = None
+    orm.correction_type = None
+    orm.use_split_payment = False
+    orm.self_billing = False
+    orm.reverse_charge = False
+    orm.reverse_charge_art = False
+    orm.reverse_charge_flag = False
+    orm.cash_accounting_method = False
+    orm.exchange_rate = None
+    orm.exchange_rate_date = None
+    orm.advance_amount = None
+    orm.settled_advance_ids_json = None
     return orm
 
 

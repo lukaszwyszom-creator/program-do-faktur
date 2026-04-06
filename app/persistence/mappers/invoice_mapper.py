@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
-from app.domain.enums import InvoiceStatus, InvoiceType
+from app.domain.enums import CorrectionType, InvoiceStatus, InvoiceType
 from app.domain.models.invoice import Invoice, InvoiceItem
 from app.persistence.models.contractor import ContractorORM
 from app.persistence.models.contractor_override import ContractorOverrideORM
@@ -51,6 +51,19 @@ class InvoiceMapper:
             correction_of_invoice_id=orm.correction_of_invoice_id,
             correction_of_ksef_number=orm.correction_of_ksef_number,
             correction_reason=orm.correction_reason,
+            correction_type=CorrectionType(orm.correction_type) if orm.correction_type else None,
+            use_split_payment=orm.use_split_payment or False,
+            self_billing=orm.self_billing or False,
+            reverse_charge=orm.reverse_charge or False,
+            reverse_charge_art=orm.reverse_charge_art or False,
+            reverse_charge_flag=orm.reverse_charge_flag or False,
+            cash_accounting_method=orm.cash_accounting_method or False,
+            exchange_rate=orm.exchange_rate,
+            exchange_rate_date=orm.exchange_rate_date,
+            advance_amount=orm.advance_amount,
+            settled_advance_ids=[
+                UUID(str(uid)) for uid in (orm.settled_advance_ids_json or [])
+            ],
         )
 
     @staticmethod
@@ -71,6 +84,17 @@ class InvoiceMapper:
             correction_of_invoice_id=invoice.correction_of_invoice_id,
             correction_of_ksef_number=invoice.correction_of_ksef_number,
             correction_reason=invoice.correction_reason,
+            correction_type=invoice.correction_type.value if invoice.correction_type else None,
+            use_split_payment=invoice.use_split_payment,
+            self_billing=invoice.self_billing,
+            reverse_charge=invoice.reverse_charge,
+            reverse_charge_art=invoice.reverse_charge_art,
+            reverse_charge_flag=invoice.reverse_charge_flag,
+            cash_accounting_method=invoice.cash_accounting_method,
+            exchange_rate=invoice.exchange_rate,
+            exchange_rate_date=invoice.exchange_rate_date,
+            advance_amount=invoice.advance_amount,
+            settled_advance_ids_json=[str(uid) for uid in invoice.settled_advance_ids],
             created_by=invoice.created_by,
         )
         orm.items = [
@@ -95,6 +119,17 @@ class InvoiceMapper:
         orm.correction_of_invoice_id = invoice.correction_of_invoice_id
         orm.correction_of_ksef_number = invoice.correction_of_ksef_number
         orm.correction_reason = invoice.correction_reason
+        orm.correction_type = invoice.correction_type.value if invoice.correction_type else None
+        orm.use_split_payment = invoice.use_split_payment
+        orm.self_billing = invoice.self_billing
+        orm.reverse_charge = invoice.reverse_charge
+        orm.reverse_charge_art = invoice.reverse_charge_art
+        orm.reverse_charge_flag = invoice.reverse_charge_flag
+        orm.cash_accounting_method = invoice.cash_accounting_method
+        orm.exchange_rate = invoice.exchange_rate
+        orm.exchange_rate_date = invoice.exchange_rate_date
+        orm.advance_amount = invoice.advance_amount
+        orm.settled_advance_ids_json = [str(uid) for uid in invoice.settled_advance_ids]
 
         # Synchronizacja pozycji — zastąpienie kolekcji.
         # Relacja ma cascade="all, delete-orphan", więc SQLAlchemy
@@ -136,6 +171,7 @@ class InvoiceMapper:
             vat_total=orm.vat_amount,
             gross_total=orm.gross_amount,
             sort_order=orm.sort_order,
+            vat_amount_pln=orm.vat_amount_pln,
         )
 
     @staticmethod
@@ -152,6 +188,7 @@ class InvoiceMapper:
             vat_amount=item.vat_total,
             gross_amount=item.gross_total,
             sort_order=item.sort_order,
+            vat_amount_pln=item.vat_amount_pln,
         )
 
     @staticmethod

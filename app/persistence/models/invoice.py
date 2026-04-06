@@ -1,7 +1,8 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +31,20 @@ class InvoiceORM(Base):
     correction_of_invoice_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     correction_of_ksef_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     correction_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    correction_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Adnotacje FA(3)
+    use_split_payment: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    self_billing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    reverse_charge: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    reverse_charge_art: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    reverse_charge_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    cash_accounting_method: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Waluta obca
+    exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    exchange_rate_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # ZAL/ROZ
+    advance_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    settled_advance_ids_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

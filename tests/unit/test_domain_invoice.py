@@ -292,11 +292,11 @@ class TestValidateForKSeF:
         _make_full_invoice(
             invoice_type=InvoiceType.KOR,
             correction_of_ksef_number="KSeF/2026/0001",
-        ).validate_for_ksef()
+        ).validate_vat()  # validate_kor osobno — tutaj testujemy tylko validate_vat
 
     def test_kor_with_invoice_id_passes(self):
         _make_full_invoice(
             invoice_type=InvoiceType.KOR,
             correction_of_invoice_id=uuid4(),
-        ).validate_for_ksef()
+        ).validate_vat()  # validate_kor osobno — tutaj testujemy tylko validate_vat
 

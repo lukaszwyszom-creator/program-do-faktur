@@ -33,21 +33,23 @@ def open_session(
 
 @router.delete("/close", response_model=CloseSessionResponse)
 def close_session(
+    nip: str,
     ksef_session_service: Annotated[KSeFSessionService, Depends(get_ksef_session_service)],
     current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> CloseSessionResponse:
-    """Zamyka aktywną sesję KSeF."""
-    orm = ksef_session_service.close_session(actor_user_id=current_user.user_id)
+    """Zamyka aktywną sesję KSeF dla danego NIP."""
+    orm = ksef_session_service.close_session(nip=nip, actor_user_id=current_user.user_id)
     return CloseSessionResponse.model_validate(orm)
 
 
 @router.get("/active", response_model=KSeFSessionResponse)
 def get_active_session(
+    nip: str,
     ksef_session_service: Annotated[KSeFSessionService, Depends(get_ksef_session_service)],
     current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> KSeFSessionResponse:
-    """Zwraca aktywną sesję KSeF."""
-    orm = ksef_session_service.get_active_session()
+    """Zwraca aktywną sesję KSeF dla danego NIP."""
+    orm = ksef_session_service.get_active_session(nip)
     return KSeFSessionResponse.model_validate(orm)
 
 
