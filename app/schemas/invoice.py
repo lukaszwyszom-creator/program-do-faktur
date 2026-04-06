@@ -19,6 +19,7 @@ class InvoiceCreateRequest(BaseModel):
     buyer_id: UUID | None = None
     issue_date: date
     sale_date: date
+    delivery_date: date | None = None
     currency: str = "PLN"
     items: list[InvoiceItemInput]
 
@@ -57,6 +58,8 @@ class InvoiceResponse(BaseModel):
     number_local: str | None = None
     issue_date: date
     sale_date: date
+    delivery_date: date | None = None
+    ksef_reference_number: str | None = None
     currency: str
     seller_snapshot: dict
     buyer_snapshot: dict
@@ -76,6 +79,8 @@ class InvoiceResponse(BaseModel):
             number_local=invoice.number_local,
             issue_date=invoice.issue_date,
             sale_date=invoice.sale_date,
+            delivery_date=invoice.delivery_date,
+            ksef_reference_number=invoice.ksef_reference_number,
             currency=invoice.currency,
             seller_snapshot=invoice.seller_snapshot,
             buyer_snapshot=invoice.buyer_snapshot,

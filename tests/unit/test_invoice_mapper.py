@@ -175,3 +175,71 @@ class TestBuildContractorSnapshot:
 
         snapshot = InvoiceMapper.build_contractor_snapshot(contractor, override)
         assert snapshot["name"] == "Original"
+
+
+class TestFA3Fields:
+    """Testy mapowania pol FA(3): delivery_date i ksef_reference_number."""
+
+    def _make_orm_with_fa3(self, delivery_date=None, ksef_reference_number=None):
+        orm = _make_invoice_orm()
+        orm.delivery_date = delivery_date
+        orm.ksef_reference_number = ksef_reference_number
+        return orm
+
+    def test_to_domain_maps_delivery_date(self):
+        orm = self._make_orm_with_fa3(delivery_date=date(2026, 4, 4))
+        domain = InvoiceMapper.to_domain(orm)
+        assert domain.delivery_date == date(2026, 4, 4)
+
+    def test_to_domain_delivery_date_none(self):
+        orm = self._make_orm_with_fa3(delivery_date=None)
+        domain = InvoiceMapper.to_domain(orm)
+        assert domain.delivery_date is None
+
+    def test_to_domain_maps_ksef_reference_number(self):
+        orm = self._make_orm_with_fa3(ksef_reference_number="9999909999-20260406-ABC12345-01")
+        domain = InvoiceMapper.to_domain(orm)
+        assert domain.ksef_reference_number == "9999909999-20260406-ABC12345-01"
+
+    def test_to_domain_ksef_reference_number_none(self):
+        orm = self._make_orm_with_fa3(ksef_reference_number=None)
+        domain = InvoiceMapper.to_domain(orm)
+        assert domain.ksef_reference_number is None
+
+    def test_to_orm_writes_delivery_date(self, sample_invoice: Invoice):
+        sample_invoice.delivery_date = date(2026, 4, 3)
+        orm = InvoiceMapper.to_orm(sample_invoice)
+        assert orm.delivery_date == date(2026, 4, 3)
+
+    def test_to_orm_writes_ksef_reference_number(self, sample_invoice: Invoice):
+        sample_invoice.ksef_reference_number = "1234567890-20260406-XYZ00001-01"
+        orm = InvoiceMapper.to_orm(sample_invoice)
+        assert orm.ksef_reference_number == "1234567890-20260406-XYZ00001-01"
+
+    def test_update_orm_sets_delivery_date(self, sample_invoice: Invoice):
+        from unittest.mock import MagicMock
+        orm = MagicMock()
+        orm.items = []
+        sample_invoice.delivery_date = date(2026, 4, 2)
+        InvoiceMapper.update_orm(orm, sample_invoice)
+        assert orm.delivery_date == date(2026, 4, 2)
+
+    def test_update_orm_sets_ksef_reference_number(self, sample_invoice: Invoice):
+        from unittest.mock import MagicMock
+        orm = MagicMock()
+        orm.items = []
+        sample_invoice.ksef_reference_number = "9999909999-20260406-DEF00002-01"
+        InvoiceMapper.update_orm(orm, sample_invoice)
+        assert orm.ksef_reference_number == "9999909999-20260406-DEF00002-01"
+
+    def test_roundtrip_delivery_date(self, sample_invoice: Invoice):
+        """to_orm a potem to_domain zachowuje delivery_date."""
+        sample_invoice.delivery_date = date(2026, 3, 31)
+        orm = InvoiceMapper.to_orm(sample_invoice)
+        # Symulujemy odczyt z bazy — ustawiamy pola ORM recznie
+        from unittest.mock import MagicMock
+        read_orm = _make_invoice_orm()
+        read_orm.delivery_date = orm.delivery_date
+        read_orm.ksef_reference_number = orm.ksef_reference_number
+        domain2 = InvoiceMapper.to_domain(read_orm)
+        assert domain2.delivery_date == date(2026, 3, 31)

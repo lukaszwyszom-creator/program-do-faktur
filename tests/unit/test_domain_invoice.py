@@ -150,3 +150,62 @@ class TestValidateItemsOrder:
         ]
         with pytest.raises(InvalidInvoiceError):
             inv.validate_items_order()
+
+
+class TestFA3NewFields:
+    """Testy nowych pól domenowych dodanych na potrzeby FA(3)."""
+
+    def test_delivery_date_defaults_to_none(self):
+        inv = _make_invoice()
+        assert inv.delivery_date is None
+
+    def test_ksef_reference_number_defaults_to_none(self):
+        inv = _make_invoice()
+        assert inv.ksef_reference_number is None
+
+    def test_delivery_date_can_be_set(self):
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.DRAFT,
+            issue_date=date(2026, 4, 6),
+            sale_date=date(2026, 4, 5),
+            delivery_date=date(2026, 4, 4),
+            currency="PLN",
+            seller_snapshot={},
+            buyer_snapshot={},
+            items=[],
+            total_net=Decimal("0"),
+            total_vat=Decimal("0"),
+            total_gross=Decimal("0"),
+            created_at=now,
+            updated_at=now,
+        )
+        assert inv.delivery_date == date(2026, 4, 4)
+
+    def test_ksef_reference_number_can_be_set(self):
+        inv = _make_invoice()
+        inv.ksef_reference_number = "9999909999-20260406-ABC12345-01"
+        assert inv.ksef_reference_number == "9999909999-20260406-ABC12345-01"
+
+    def test_delivery_date_independent_of_sale_date(self):
+        """delivery_date to osobne pole, niezalezne od sale_date."""
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.DRAFT,
+            issue_date=date(2026, 4, 10),
+            sale_date=date(2026, 4, 8),
+            delivery_date=date(2026, 4, 7),
+            currency="PLN",
+            seller_snapshot={},
+            buyer_snapshot={},
+            items=[],
+            total_net=Decimal("0"),
+            total_vat=Decimal("0"),
+            total_gross=Decimal("0"),
+            created_at=now,
+            updated_at=now,
+        )
+        assert inv.delivery_date != inv.sale_date
+        assert inv.delivery_date == date(2026, 4, 7)

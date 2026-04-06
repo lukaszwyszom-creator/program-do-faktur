@@ -63,6 +63,7 @@ class InvoiceService:
 
         issue_date = data["issue_date"]
         sale_date = data["sale_date"]
+        delivery_date: date | None = data.get("delivery_date")
 
         if sale_date > issue_date:
             raise InvalidInvoiceError(
@@ -82,6 +83,7 @@ class InvoiceService:
             status=InvoiceStatus.DRAFT,
             issue_date=issue_date,
             sale_date=sale_date,
+            delivery_date=delivery_date,
             currency=data.get("currency", "PLN"),
             seller_snapshot=seller_snapshot,
             buyer_snapshot=buyer_snapshot,

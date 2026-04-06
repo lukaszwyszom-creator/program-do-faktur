@@ -48,6 +48,8 @@ class Invoice:
     created_at: datetime
     updated_at: datetime
     number_local: str | None = None
+    delivery_date: date | None = None
+    ksef_reference_number: str | None = None
     created_by: UUID | None = None
 
     # -----------------------

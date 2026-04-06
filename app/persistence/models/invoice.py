@@ -23,6 +23,8 @@ class InvoiceORM(Base):
     validation_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
     issue_date: Mapped[date] = mapped_column(Date)
     sale_date: Mapped[date] = mapped_column(Date)
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ksef_reference_number: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     currency: Mapped[str] = mapped_column(String(8), default="PLN")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

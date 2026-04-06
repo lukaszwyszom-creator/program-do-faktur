@@ -182,6 +182,89 @@ class TestGetInvoice:
             service.get_invoice(uuid4())
 
 
+class TestCreateInvoiceFA3Fields:
+    """Testy pola delivery_date w create_invoice."""
+
+    @patch("app.services.invoice_service.settings")
+    def test_delivery_date_passed_through(self, mock_settings, service: InvoiceService, actor: AuthenticatedUser):
+        mock_settings.seller_nip = "1234567890"
+        mock_settings.seller_name = "Firma"
+        mock_settings.seller_street = "ul. Testowa"
+        mock_settings.seller_building_no = "1"
+        mock_settings.seller_apartment_no = None
+        mock_settings.seller_postal_code = "00-001"
+        mock_settings.seller_city = "Warszawa"
+        mock_settings.seller_country = "PL"
+
+        data = _valid_create_data()
+        data["delivery_date"] = date(2026, 4, 3)
+
+        service.contractor_repository.get_by_id.return_value = MagicMock()
+        service.contractor_override_repository.get_active_by_contractor_id.return_value = None
+
+        now = datetime.now(UTC)
+        captured = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.DRAFT,
+            issue_date=data["issue_date"],
+            sale_date=data["sale_date"],
+            delivery_date=date(2026, 4, 3),
+            currency="PLN",
+            seller_snapshot={},
+            buyer_snapshot={},
+            items=[],
+            total_net=Decimal("0"),
+            total_vat=Decimal("0"),
+            total_gross=Decimal("0"),
+            created_at=now,
+            updated_at=now,
+        )
+        service.invoice_repository.add.return_value = captured
+
+        result = service.create_invoice(data, actor)
+
+        assert result.delivery_date == date(2026, 4, 3)
+
+    @patch("app.services.invoice_service.settings")
+    def test_delivery_date_none_when_not_provided(self, mock_settings, service: InvoiceService, actor: AuthenticatedUser):
+        mock_settings.seller_nip = "1234567890"
+        mock_settings.seller_name = "Firma"
+        mock_settings.seller_street = "ul. Testowa"
+        mock_settings.seller_building_no = "1"
+        mock_settings.seller_apartment_no = None
+        mock_settings.seller_postal_code = "00-001"
+        mock_settings.seller_city = "Warszawa"
+        mock_settings.seller_country = "PL"
+
+        data = _valid_create_data()  # brak delivery_date
+
+        service.contractor_repository.get_by_id.return_value = MagicMock()
+        service.contractor_override_repository.get_active_by_contractor_id.return_value = None
+
+        now = datetime.now(UTC)
+        returned = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.DRAFT,
+            issue_date=data["issue_date"],
+            sale_date=data["sale_date"],
+            delivery_date=None,
+            currency="PLN",
+            seller_snapshot={},
+            buyer_snapshot={},
+            items=[],
+            total_net=Decimal("0"),
+            total_vat=Decimal("0"),
+            total_gross=Decimal("0"),
+            created_at=now,
+            updated_at=now,
+        )
+        service.invoice_repository.add.return_value = returned
+
+        result = service.create_invoice(data, actor)
+
+        assert result.delivery_date is None
+
+
 class TestListInvoices:
     def test_returns_tuple(self, service: InvoiceService, sample_invoice: Invoice):
         service.invoice_repository.list_paginated.return_value = ([sample_invoice], 1)

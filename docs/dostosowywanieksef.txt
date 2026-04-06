@@ -1,0 +1,2043 @@
+PLAN DOCELOWEJ ARCHITEKTURY I DOSTOSOWANIA REPO DO KSEF
+
+Cel dokumentu
+- Ustalic docelowa architekture programu tak, aby przejsc od prostego procesu MVP do pelnej funkcjonalnosci.
+- Zachowac mozliwosc bezpiecznego wdrazania kolejnych zmian bez przepisywania calego systemu.
+- Uzywac tego pliku jako checklisty wdrozeniowej i kontrolnej.
+
+Jak uzywac tego dokumentu
+- Kazdy etap ma status do odhaczenia.
+- Kazdy modul ma opis odpowiedzialnosci i miejsca w repo, ktore nalezy utrzymywac lub przebudowac.
+- Po zakonczeniu prac nalezy uzupelnic sekcje "Zrobione" przy danym etapie.
+
+Legenda statusow
+- [ ] nie rozpoczet e
+- [~] w toku
+- [x] zakonczone
+- [!] wymaga decyzji architektonicznej
+
+Zasady architektoniczne docelowe
+1. Rdzen biznesowy faktury ma byc niezalezny od formatu XML KSeF.
+2. Integracja z KSeF ma byc adapterem, a nie centrum logiki biznesowej.
+3. Workflow ma byc opisany przez jawne use case'y, a nie przez rozproszona logike w wielu warstwach.
+4. Kazda nowa funkcja powinna wejsc glownie przez jeden z obszarow: domena, adapter KSeF, workflow, API/UI.
+5. Zmiany w podr eczniku KSeF lub w API powinny wymagac glownie zmiany adaptera i testow kontraktowych.
+6. System ma pozostac modular monolith, a nie zbior przypadkowych zaleznosci miedzy serwisami.
+
+Docelowe modu ly systemu
+
+1. Modul Faktury
+Odpowiedzialnosc
+- Model biznesowy faktury i jej wariantow.
+- Walidacja danych wejscia niezalezna od KSeF.
+- Przejscia statusow lokalnych faktury.
+
+Docelowe pliki/glowne miejsca
+- app/domain/models/invoice.py
+- app/domain/enums.py
+- app/schemas/invoice.py
+- app/services/invoice_service.py
+- app/persistence/models/invoice.py
+- app/persistence/repositories/invoice_repository.py
+
+Docelowy stan
+- Faktura ma wewnetrzny model gotowy do mapowania na FA(3) i kolejne warianty.
+- Obsluguje zwykla fakture online, korekte, zaliczkowa, rozliczajaca i kolejne typy bez psucia podstawowego modelu.
+- Numer KSeF, dane referencyjne i stan obiegu sa widoczne na poziomie modelu biznesowego.
+
+2. Modul KSeF Core / Adapter
+Odpowiedzialnosc
+- Mapowanie modelu wewnetrznego na dokument KSeF.
+- Komunikacja HTTP z API KSeF.
+- Interpretacja odpowiedzi KSeF.
+- Pobieranie numeru KSeF, UPO i innych artefaktow systemowych.
+
+Docelowe pliki/glowne miejsca
+- app/integrations/ksef/mapper.py
+- app/integrations/ksef/client.py
+- app/integrations/ksef/auth.py
+- app/integrations/ksef/exceptions.py
+
+Docelowy stan
+- Adapter wspiera FA(3) jako aktualny format.
+- Struktura kodu oddziela: auth, document build, send, status, UPO, receive, offline, batch.
+- Zmiana wersji schemy KSeF nie wymusza zmian w domenie poza uzasadnionymi przypadkami.
+
+3. Modul Workflow / Transmisji
+Odpowiedzialnosc
+- Orkiestracja procesu: przygotuj, wyslij, sprawdz status, pobierz UPO, zakoncz.
+- Retry, planowanie jobow, idempotencja i przejscia techniczne.
+
+Docelowe pliki/glowne miejsca
+- app/services/transmission_service.py
+- app/worker/job_handlers/submit_invoice.py
+- app/worker/job_handlers/poll_ksef_status.py
+- app/persistence/models/transmission.py
+- app/persistence/repositories/transmission_repository.py
+- app/persistence/models/background_job.py
+
+Docelowy stan
+- Kazdy krok procesu ma jasny status i jedno miejsce odpowiedzialnosci.
+- Numer KSeF i UPO sa domykane przez workflow, a nie zostawione jako "moze kiedys".
+- Retry dotyczy tylko bledow przejsciowych.
+
+4. Modul Uwierzytelnienia i Uprawnien KSeF
+Odpowiedzialnosc
+- Zarzadzanie metodami uwierzytelniania do KSeF.
+- Powiazanie poswiadczen z uzytkownikiem lub podmiotem.
+- Kontrola dostepu do operacji KSeF.
+- Obsluga administracyjna tokenow, uprawnien i historii sesji.
+- Przygotowanie pod ZAW-FA i inne formalne sposoby nadawania uprawnien.
+
+Docelowe pliki/glowne miejsca
+- app/core/config.py
+- app/services/ksef_session_service.py
+- app/api/routers/ksef_session.py
+- app/api/deps.py
+- przyszly modul uprawnien KSeF
+
+Docelowy stan
+- System nie opiera sie na jednym globalnym tokenie dla calej aplikacji.
+- Sesje KSeF sa prowadzone w kontekscie konkretnego podatnika i konkretnych uprawnien.
+- Mozliwe jest rozszerzenie o certyfikaty, tokeny per user i kolejne metody auth.
+- System wspiera cykl zycia tokenu: utworzenie, lista, uniewaznienie, historia uzycia.
+- System ma jawny model obslugi ZAW-FA oraz historii sesji w kontekscie podatnika.
+
+5. Modul Odbioru Faktur / Inbox
+Odpowiedzialnosc
+- Pobieranie faktur otrzymanych z KSeF.
+- Lista, filtrowanie, dostep i historia pobran.
+- Obsluga wariantow dostepu do faktury: nabywca z NIP, nabywca bez NIP, konsument, dostep anonimowy.
+- Obsluga dostepu dwuetapowego i scenariuszy przekazania faktury poza KSeF.
+
+Docelowy stan
+- Oddzielny proces od faktur sprzedazowych.
+- Nie miesza lokalnej ewidencji sprzedazy z zakupowym inboxem KSeF.
+- Obejmuje takze scenariusze dostepu przez QR i poza standardowym zalogowanym inboxem.
+
+6. Modul Dokumentow Uzytkowych
+Odpowiedzialnosc
+- Wizualizacja faktury i artefaktow procesu KSeF.
+- Eksport PDF/HTML.
+- Prezentacja numeru KSeF, UPO i kodow QR w dokumentach oraz UI.
+- Potwierdzenie transakcji i inne dokumenty towarzyszace przekazywane poza KSeF, gdy wymagaja tego scenariusze biznesowe.
+
+Docelowe pliki/glowne miejsca
+- app/services/pdf_service.py
+- app/api/routers/invoices.py
+- frontend/
+
+Docelowy stan
+- UI pokazuje wynik operacji KSeF, a nie tylko lokalne dane faktury.
+- Rozszerzenia typu QR nie psuja podstawowego widoku faktury.
+- Modul odpowiada za forme prezentacji i eksport, a nie za reguly dostepu do faktury.
+
+7. Modul Rozliczen i Raportowania KSeF
+Odpowiedzialnosc
+- Powiazanie numeru KSeF z platnosciami i procesem rozliczen.
+- Obsluga MPP i identyfikatora zbiorczego tam, gdzie ma to zastosowanie.
+- Przygotowanie danych do JPK i innych raportow wymagajacych numeru KSeF.
+
+Docelowy stan
+- Numer KSeF nie konczy sie na wysylce dokumentu, ale jest wykorzystywany dalej w procesach platnosci i raportowania.
+- System umie obsluzyc identyfikator zbiorczy jako osobny artefakt domenowy, a nie jako dopisek do platnosci.
+
+8. Modul Funkcji Szczegolnych KSeF
+Odpowiedzialnosc
+- Funkcje specjalne opisane w podreczniku, ktore nie mieszcza sie w zwyklym workflow faktury online.
+- VAT RR i VAT RR KOREKTA.
+- Zgloszenie naduzycia faktury i ukrywanie faktury zakupowej.
+
+Docelowy stan
+- Funkcje specjalne sa modelowane jawnie, a nie jako przypadkowe rozszerzenia glownego workflow sprzedaży.
+
+9. Modul Operacyjny / Monitoring
+Odpowiedzialnosc
+- Audyt, logowanie, metryki, diagnostyka procesow KSeF.
+
+Docelowy stan
+- Mozna odpowiedziec na pytania: co wyslano, kiedy, przez kogo, z jakim wynikiem, czy UPO zostalo pobrane.
+
+Docelowy proces podstawowy
+1. Uzytkownik tworzy fakture.
+2. System waliduje dane biznesowe i zapisuje fakture lokalnie jako draft.
+3. Uzytkownik oznacza fakture jako gotowa do wysylki.
+4. Workflow tworzy zadanie wysylki do KSeF.
+5. Adapter generuje FA(3) z modelu domenowego.
+6. System wysyla fakture w sesji interaktywnej.
+7. Workflow pobiera status przetwarzania.
+8. Po sukcesie zapisuje numer KSeF i pobiera UPO.
+9. API i UI pokazuja wynik oraz artefakty procesu.
+
+Docelowy proces rozszerzony
+- odbior faktur z KSeF
+- korekty
+- sesja wsadowa
+- offline24 / offline / awaria / awaria calkowita
+- QR i anonimowy dostep
+- dostep dwuetapowy i warianty dostepu dla nabywcy bez NIP oraz konsumenta
+- potwierdzenie transakcji
+- zalaczniki
+- samofakturowanie
+- MPP / platnosci z numerem KSeF / identyfikator zbiorczy
+- JPK i raportowanie z wykorzystaniem numeru KSeF
+- VAT RR / VAT RR KOREKTA
+- zgloszenie naduzycia faktury
+- ukrywanie faktury zakupowej
+
+ETAPY WDROZENIA
+
+ETAP 0 - Decyzje i kontrakt architektoniczny
+Status: [x] ZREALIZOWANY 2026-04-06
+Cel
+- Ustalic minimalny model faktury i granice modulow.
+
+Do zrobienia
+- [x] Spisac minimalny zestaw pol dla standardowej faktury online.
+- [x] Spisac, co nalezy do domeny, a co nalezy do adaptera KSeF.
+- [x] Spisac aktualne wykluczenia zakresu MVP 2.0.
+
+Definition of done
+- Jest jedna tabela: pole biznesowe -> zrodlo danych -> uzycie w FA(3).
+- Jest lista rzeczy swiadomie odlozonych.
+
+Zrobione
+- docs/kontrakt_danych_fa3.txt - pelny kontrakt danych (Sekcje 1-5)
+
+ETAP 1 - Rdzen faktury gotowy pod FA(3)
+Status: [ ]
+Cel
+- Przebudowac model faktury tak, by nie byl zalezny od aktualnego mappera FA(2).
+
+Do zrobienia
+- [ ] Rozszerzyc model domenowy faktury.
+- [ ] Rozszerzyc schematy API i persystencje.
+- [ ] Dodac walidacje dla podstawowego scenariusza online.
+
+Definition of done
+- Faktura ma komplet danych potrzebnych do wygenerowania podstawowej FA(3).
+- Domena nie zawiera szczegolow transportu HTTP i sesji KSeF.
+
+Zrobione
+-
+
+ETAP 2 - Adapter KSeF na FA(3)
+Status: [ ]
+Cel
+- Zamienic FA(2) na FA(3) i przygotowac adapter na przyszle rozszerzenia.
+
+Do zrobienia
+- [ ] Przepisac mapper do FA(3).
+- [ ] Dodac walidacje generowanego XML.
+- [ ] Odlaczyc logike formatowania od modelu biznesowego.
+
+Definition of done
+- Testy mappera pilnuja FA(3), nie FA(2).
+- XML jest poprawny dla podstawowej faktury online.
+
+Zrobione
+-
+
+ETAP 3 - Domkniecie workflow wysylki
+Status: [ ]
+Cel
+- Workflow ma konczyc sie numerem KSeF i UPO, a nie tylko technicznym statusem transmisji.
+
+Do zrobienia
+- [ ] Uporzadkowac statusy transmisji.
+- [ ] Zapisywac numer KSeF po sukcesie.
+- [ ] Pobierac i przechowywac UPO.
+- [ ] Doprecyzowac retry dla bledow przejsciowych.
+
+Definition of done
+- Po statusie sukcesu system posiada numer KSeF i UPO.
+- Workflow jest testowalny end-to-end.
+
+Zrobione
+-
+
+ETAP 4 - Widocznosc wyniku dla uzytkownika
+Status: [ ]
+Cel
+- Pokazac efekt integracji w API i UI.
+
+Do zrobienia
+- [ ] Wystawic numer KSeF w odpowiedziach API.
+- [ ] Wystawic UPO do pobrania.
+- [ ] Dodac czytelna prezentacje statusow i wyniku w UI.
+
+Definition of done
+- Uzytkownik widzi, co zostalo przyjete przez KSeF i moze pobrac artefakty.
+
+Zrobione
+-
+
+ETAP 5 - Uwierzytelnienie i uprawnienia KSeF
+Status: [ ]
+Cel
+- Odejsc od jednego globalnego tokena i przygotowac system na rozwoj.
+
+Do zrobienia
+- [ ] Wprowadzic model poswiadczen per uzytkownik lub podmiot.
+- [ ] Powiazac sesje KSeF z konkretnym kontekstem podatnika.
+- [ ] Przygotowac rozszerzalnosc pod certyfikaty i inne metody auth.
+- [ ] Dodac model uprawnien KSeF zgodny z rolami biznesowymi opisanymi w podreczniku.
+- [ ] Dodac jawny model procesu ZAW-FA; pierwsza implementacja moze zaczynac od adaptera tego procesu.
+- [ ] Dodac cykl zycia tokenow: lista, uniewaznienie, historia uzycia.
+- [ ] Dodac historie sesji w kontekscie podatnika.
+
+Definition of done
+- Integracja KSeF nie zalezy od jednego sekretu aplikacyjnego dla wszystkich.
+- Uprawnienia, tokeny i historia sesji nie sa juz ukryta wiedza techniczna, tylko jawna funkcja systemu.
+- ZAW-FA ma jawne miejsce w architekturze, nawet jesli pierwsza iteracja nie obejmuje jeszcze pelnej automatyzacji procesu.
+
+Zrobione
+-
+
+ETAP 6 - Korekty i warianty faktur
+Status: [ ]
+Cel
+- Rozszerzyc rdzen faktury o typy dokumentow wymagane biznesowo.
+
+Do zrobienia
+- [ ] Faktura korygujaca.
+- [ ] Faktura zaliczkowa.
+- [ ] Faktura rozliczajaca.
+- [ ] Kolejne typy wedlug potrzeb produktu.
+
+Definition of done
+- Dodanie nowego typu faktury nie wymaga przepisywania podstawowego workflow.
+
+Zrobione
+-
+
+ETAP 7 - Odbior faktur i inbox zakupowy
+Status: [ ]
+Cel
+- Dodac osobny proces dla faktur otrzymanych.
+
+Do zrobienia
+- [ ] Pobieranie faktur z KSeF.
+- [ ] Lista i filtrowanie faktur zakupowych.
+- [ ] Oddzielenie sprzedazy od inboxu zakupowego.
+- [ ] Obsluga dostepu dla nabywcy bez NIP i konsumenta.
+- [ ] Obsluga dostepu anonimowego.
+- [ ] Obsluga dostepu dwuetapowego oraz scenariuszy dostepu przez QR zwiazanych z odbiorem.
+- [ ] Uporzadkowanie scenariuszy przekazania faktury poza KSeF.
+
+Definition of done
+- System ma dwa jasne obiegi: sprzedazowy i zakupowy.
+- Odbior faktur obejmuje nie tylko zalogowany inbox, ale tez scenariusze dostepu opisane w podreczniku.
+- Scenariusze dostepu do faktury maja jednego wlasciciela architektonicznego: modul odbioru / inbox.
+
+Zrobione
+-
+
+ETAP 8 - Funkcje zaawansowane KSeF
+Status: [ ]
+Cel
+- Dodawac kolejne funkcjonalnosci bez naruszania rdzenia.
+
+Do zrobienia
+- [ ] Sesja wsadowa.
+- [ ] Tryby offline.
+- [ ] Zalaczniki.
+- [ ] Samofakturowanie.
+- [ ] Potwierdzenie transakcji.
+- [ ] Zgloszenie zamiaru korzystania z zalacznikow oraz odebranie tej mozliwosci.
+- [ ] Ograniczenia i reguly techniczne dla zalacznikow oraz batch-only upload.
+- [ ] Generowanie wariantow QR dla ONLINE / OFFLINE jako artefaktu dokumentu.
+- [ ] VAT RR i VAT RR KOREKTA.
+- [ ] Zgloszenie naduzycia faktury.
+- [ ] Ukrywanie faktury zakupowej i przywracanie widocznosci.
+
+Definition of done
+- Kazda funkcja wchodzi jako rozszerzenie modulu KSeF lub workflow, nie jako chaos zmian wszedzie naraz.
+- Funkcje specjalne z czesci III podrecznika maja jawne miejsce w architekturze i backlogu.
+- ETAP nie przejmuje odpowiedzialnosci za reguly dostepu do faktury, tylko za funkcje specjalne i artefakty.
+
+Zrobione
+-
+
+ETAP 9 - Rozliczenia, raportowanie i stabilizacja dlugoterminowa
+Status: [ ]
+Cel
+- Domknac obszary rozliczen i raportowania oraz przygotowac architekture na dalsze zmiany prawne.
+
+Do zrobienia
+Obszar biznesowy
+- [ ] Powiazac numer KSeF z procesami platnosci i MPP.
+- [ ] Dodac identyfikator zbiorczy jako artefakt i proces biznesowy.
+- [ ] Przygotowac eksporty i raportowanie JPK z numerem KSeF.
+
+Obszar stabilizacji architektury
+- [ ] Dodac testy kontraktowe i scenariusze regresyjne.
+- [ ] Dodac dokumentacje techniczna use case'ow.
+- [ ] Dodac feature flags dla funkcji nieobowiazkowych.
+- [ ] Dodac zasady wersjonowania adapterow i migracji danych.
+
+Definition of done
+- Nowe wymaganie prawne lub biznesowe ma przewidywalny koszt wdrozenia.
+- Rozliczenia i raportowanie wykorzystuja numer KSeF jako element procesu, a nie tylko informacji pomocniczej.
+
+Zrobione
+-
+
+KRYTERIA OCENY, CZY ARCHITEKTURA JEST DOBRA
+- Nowa funkcja nie wymaga przepisywania calej sciezki od API do workera.
+- Zmiana FA(3) lub KSeF API dotyka glownie adaptera i testow kontraktowych.
+- Dodanie nowego typu faktury nie psuje zwyklej faktury online.
+- Numer KSeF i UPO nie sa ukryte w warstwie technicznej.
+- Uwierzytelnienie i uprawnienia mozna rozwijac bez przepisywania workflow wysylki.
+- Dostep do faktur, platnosci, raportowanie i funkcje specjalne maja osobne miejsca w architekturze.
+
+NAJWAZNIEJSZA REKOMENDACJA
+- Nie przepisywac calego repo od zera.
+- Przebudowac kontrolowanie dwa obszary: model faktury i modul KSeF.
+- Traktowac reszte systemu jako szkielet, ktory ma obslugiwac kolejne etapy rozwoju.
+
+PRIORYTET KOLEJNOSCI DZIALAN
+1. ETAP 0
+2. ETAP 1
+3. ETAP 2
+4. ETAP 3
+5. ETAP 4
+6. ETAP 5
+7. ETAP 6
+8. ETAP 7
+9. ETAP 8
+10. ETAP 9
+
+PLAN WYKONAWCZY - KOLEJNOSC PIERWSZYCH COMMITOW DLA ETAP 0-4
+
+Cel sekcji
+- Rozpisac praktyczna kolejnosc wdrazania zmian.
+- Ulatwic prace commit po commicie bez mieszania wielu tematow naraz.
+- Pozwolic odhaczac postep i wracac do miejsca, w ktorym praca zostala przerwana.
+
+Zasady pracy z commitami
+- Jeden commit = jeden logiczny krok.
+- Nie mieszac przebudowy domeny z przebudowa UI, jesli nie jest to konieczne.
+- Najpierw zmieniac model i adapter, potem workflow, potem API/UI.
+- Kazdy commit powinien miec testy odpowiednie do zakresu zmiany.
+
+COMMIT 01 - Spis kontraktu danych dla faktury online FA(3)
+Status: [x] ZREALIZOWANY 2026-04-06
+Zakres
+- Spisac minimalny zestaw pol dla standardowej faktury online.
+- Spisac mapowanie: pole biznesowe -> zrodlo danych -> element FA(3).
+- Spisac swiadomie odlozone obszary poza zakresem pierwszego wdrozenia.
+
+Pliki docelowe
+- docs/dostosowywanieksef.txt
+- docs/kontrakt_danych_fa3.txt (plik analityczny)
+
+Definition of done
+- Jest jawny kontrakt danych dla pierwszego scenariusza online.
+- Wiadomo, czego jeszcze nie implementujemy.
+
+Zrobione
+- docs/kontrakt_danych_fa3.txt: tabela pol biznesowych -> zrodlo -> FA(3), wykluczenia zakresu, zaleznosci miedzy commitami
+
+COMMIT 02 - Minimalne rozszerzenie modelu domenowego faktury
+Status: [x] ZREALIZOWANY 2026-04-06
+Zakres
+- Rozszerzyc model domenowy pod podstawowa FA(3).
+- Dopasowac schematy API do nowych pol.
+- Dopasowac persystencje i mapowanie ORM.
+
+Pliki docelowe
+- app/domain/models/invoice.py
+- app/domain/enums.py
+- app/schemas/invoice.py
+- app/services/invoice_service.py
+- app/persistence/models/invoice.py
+- app/persistence/repositories/invoice_repository.py
+- app/persistence/mappers/invoice_mapper.py
+
+Definition of done
+- Domena ma dane potrzebne do podstawowej FA(3).
+- API i baza nie gubia tych danych.
+
+Zrobione
+- Invoice.delivery_date: date | None, Invoice.ksef_reference_number: str | None
+- InvoiceORM: delivery_date (Date nullable), ksef_reference_number (String(64) nullable + index)
+- InvoiceCreateRequest: +delivery_date, InvoiceResponse: +delivery_date +ksef_reference_number
+- invoice_service.create_invoice: przepuszcza delivery_date z requestu
+- InvoiceMapper.to_domain/to_orm/update_orm: wszystkie nowe pola
+- Migracja: alembic/versions/0003_b2c3d4e5f6a7_invoice_fa3_fields.py
+- 53/53 testow przechodzi
+
+ROZBICIE COMMIT 02 - TASKI TECHNICZNE DO ODHACZANIA
+
+02.1 - Inwentaryzacja aktualnego modelu faktury
+Status: [x] wykonane (patrz docs/kontrakt_danych_fa3.txt Sekcja 1)
+Cel
+- Ustalic, czego juz uzywa domena i czego jeszcze brakuje pod podstawowa FA(3).
+
+Do zrobienia
+- [ ] Spisac aktualne pola w modelu domenowym faktury.
+- [ ] Spisac aktualne pola wejscia API przy tworzeniu faktury.
+- [ ] Spisac aktualne pola przechowywane w ORM i mapperze ORM.
+- [ ] Zaznaczyc pola juz pokrywajace podstawowy scenariusz online.
+- [ ] Zaznaczyc pola brakujace do podstawowego scenariusza online.
+
+Pliki do przegladu
+- app/domain/models/invoice.py
+- app/schemas/invoice.py
+- app/services/invoice_service.py
+- app/persistence/models/invoice.py
+- app/persistence/mappers/invoice_mapper.py
+
+Definition of done
+- Jest lista: "mamy / nie mamy / trzeba dodac" dla podstawowej FA(3).
+
+Zrobione
+-
+
+02.2 - Ustalenie minimalnego kontraktu domenowego
+Status: [x] wykonane (patrz docs/kontrakt_danych_fa3.txt Sekcja 2)
+Cel
+- Zdefiniowac minimalny zestaw pol domenowych bez uzalezniania ich od konkretnego XML.
+
+Do zrobienia
+- [ ] Ustalic pola identyfikacyjne dokumentu.
+- [ ] Ustalic pola sprzedawcy i nabywcy potrzebne do podstawowej faktury online.
+- [ ] Ustalic pola pozycji faktury, sum i waluty.
+- [ ] Ustalic, ktore dane maja byc obowiazkowe w domenie, a ktore opcjonalne.
+- [ ] Ustalic, ktore dane nalezy modelowac jako pola domenowe, a nie jako slabo opisane snapshoty.
+
+Pliki docelowe
+- app/domain/models/invoice.py
+- docs/dostosowywanieksef.txt
+
+Definition of done
+- Istnieje uzgodniony minimalny model domenowy faktury online.
+
+Zrobione
+-
+
+02.3 - Rozszerzenie modelu domenowego Invoice i InvoiceItem
+Status: [x] wykonane - dodano delivery_date i ksef_reference_number do Invoice
+Cel
+- Wprowadzic uzgodnione pola do rdzenia domenowego.
+
+Do zrobienia
+- [ ] Dodac brakujace pola do Invoice.
+- [ ] Dodac brakujace pola do InvoiceItem.
+- [ ] Zachowac spojnosc z aktualna maszyna stanow.
+- [ ] Dopilnowac, zeby model nie zawieral szczegolow transportu KSeF.
+
+Pliki docelowe
+- app/domain/models/invoice.py
+- app/domain/enums.py
+
+Definition of done
+- Model domenowy opisuje fakture online bez sztucznych obejsc w adapterze KSeF.
+
+Zrobione
+-
+
+02.4 - Rozszerzenie wejscia API i odpowiedzi API
+Status: [x] wykonane - InvoiceCreateRequest/InvoiceResponse zaktualizowane
+Cel
+- Dopasowac request/response do nowego modelu bez wprowadzania chaosu w kontrakcie API.
+
+Do zrobienia
+- [ ] Zaktualizowac InvoiceCreateRequest.
+- [ ] Zaktualizowac InvoiceItemInput.
+- [ ] Zaktualizowac InvoiceResponse i listowanie faktur.
+- [ ] Ustalic, ktore pola maja byc wystawiane klientowi od razu, a ktore dopiero po kolejnych etapach.
+
+Pliki docelowe
+- app/schemas/invoice.py
+- app/api/routers/invoices.py
+
+Definition of done
+- API potrafi przyjac i zwrocic dane zgodne z nowym modelem.
+
+Zrobione
+-
+
+02.5 - Rozszerzenie logiki tworzenia faktury w serwisie
+Status: [x] wykonane - create_invoice przyjmuje i przekazuje delivery_date
+Cel
+- Utrwalic nowy model w miejscu, gdzie dane sa skladane i walidowane.
+
+Do zrobienia
+- [ ] Dopasowac create_invoice do nowego kontraktu.
+- [ ] Dopasowac budowanie seller_snapshot i buyer_snapshot albo zastapic je lepszym modelem.
+- [ ] Dopasowac budowanie pozycji i wyliczanie sum.
+- [ ] Dodac walidacje nowych pol wymaganych dla podstawowego scenariusza.
+
+Pliki docelowe
+- app/services/invoice_service.py
+
+Definition of done
+- Serwis tworzy fakture zgodna z nowa domena i nie traci danych potrzebnych do FA(3).
+
+Zrobione
+-
+
+02.6 - Dopasowanie persystencji i ORM
+Status: [x] wykonane - InvoiceORM + migracja 0003
+Cel
+- Zapisac nowy model bez utraty danych i bez niejasnych konwersji.
+
+Do zrobienia
+- [ ] Zaktualizowac InvoiceORM.
+- [ ] Zaktualizowac strukture pol JSON lub kolumn, jesli jest to potrzebne.
+- [ ] Przygotowac migracje, jesli zmiana wymaga zmiany schematu bazy.
+- [ ] Upewnic sie, ze odczyt starych rekordow jest albo wspierany, albo swiadomie obsluzony.
+
+Pliki docelowe
+- app/persistence/models/invoice.py
+- alembic/versions/
+
+Definition of done
+- Baza potrafi przechowac nowy model bez recznego dopowiadania danych w kodzie.
+
+Zrobione
+-
+
+02.7 - Dopasowanie mappera ORM <-> domena
+Status: [x] wykonane - to_domain/to_orm/update_orm zaktualizowane
+Cel
+- Zapewnic jednoznaczne przejscie miedzy zapisem w bazie a modelem biznesowym.
+
+Do zrobienia
+- [ ] Zaktualizowac InvoiceMapper.to_domain.
+- [ ] Zaktualizowac InvoiceMapper.to_orm.
+- [ ] Zaktualizowac InvoiceMapper.update_orm.
+- [ ] Sprawdzic zgodnosc serializacji snapshotow i pozycji.
+
+Pliki docelowe
+- app/persistence/mappers/invoice_mapper.py
+
+Definition of done
+- Przejscie ORM -> domena -> ORM nie gubi zadnych nowych pol.
+
+Zrobione
+-
+
+02.8 - Przeglad skutkow ubocznych w warstwach zaleznych
+Status: [x] wykonane - 53/53 testow przechodzi, brak bledow kompilacji
+Cel
+- Upewnic sie, ze zmiana modelu faktury nie rozwala pobocznych modulow.
+
+Do zrobienia
+- [ ] Sprawdzic routery invoices i transmissions.
+- [ ] Sprawdzic pdf_service.
+- [ ] Sprawdzic miejsca korzystajace z buyer_snapshot i seller_snapshot.
+- [ ] Sprawdzic testy jednostkowe zalezne od starego ksztaltu Invoice.
+
+Pliki do przegladu
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/services/pdf_service.py
+- tests/unit/
+
+Definition of done
+- Znane skutki uboczne sa jawnie poprawione albo wpisane jako follow-up.
+
+Zrobione
+-
+
+02.9 - Minimalny pakiet testow zamykajacych Commit 02
+Status: [x] wykonane (Commit 03 - 75/75 testow
+Cel
+- Zamknac Commit 02 testami zanim zacznie sie prace nad mapperem FA(3).
+
+Do zrobienia
+- [ ] Test tworzenia faktury z nowym kontraktem danych.
+- [ ] Test mapowania ORM <-> domena.
+- [ ] Test odpowiedzi API po utworzeniu faktury.
+- [ ] Test regresyjny dla podstawowych sum i pozycji.
+
+Pliki docelowe
+- tests/unit/test_invoice_service.py
+- tests/unit/test_invoice_mapper.py
+- tests/unit/test_invoice_api.py
+- tests/unit/test_domain_invoice.py
+
+Definition of done
+- Commit 02 jest ustabilizowany testami i gotowy pod Commit 04.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 02
+- [x] 02.1 wykonane
+- [x] 02.2 wykonane
+- [x] 02.3 wykonane
+- [x] 02.4 wykonane
+- [x] 02.5 wykonane
+- [x] 02.6 wykonane
+- [x] 02.7 wykonane
+- [x] 02.8 wykonane
+- [x] 02.9 wykonane (Commit 03)
+
+COMMIT 03 - Testy domeny i danych wejscia dla faktury online
+Status: [x] ZREALIZOWANY 2026-04-06
+Zakres
+- Dodac lub poprawic testy walidacji tworzenia faktury.
+- Dodac testy mapowania ORM -> domena -> ORM.
+
+Pliki docelowe
+- tests/unit/test_invoice_service.py
+- tests/unit/test_invoice_mapper.py
+- tests/unit/test_domain_invoice.py
+- tests/unit/test_invoice_api.py
+
+Definition of done
+- Testy pokazuja, ze nowe pole lub nowe zasady nie psuja podstawowego scenariusza.
+
+Zrobione
+- TestFA3NewFields w test_domain_invoice.py (5 testow: delivery_date/ksef_reference_number)
+- TestFA3Fields w test_invoice_mapper.py (9 testow: to_domain/to_orm/update_orm/roundtrip)
+- TestCreateInvoiceFA3Fields w test_invoice_service.py (2 testy: delivery_date pass-through)
+- TestFA3FieldsInAPI w test_invoice_api.py (6 testow: delivery_date i ksef_reference_number w GET i POST)
+- 75/75 testow przechodzi
+
+COMMIT 04 - Przepisanie mappera KSeF z FA(2) na FA(3)
+Status: [ ]
+Zakres
+- Zmienic generowany dokument na FA(3).
+- Usunac zalozenia FA(2) z implementacji.
+- Przygotowac kod na dalsze rozszerzenia mappera.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Kod nie generuje juz FA(2).
+- Podstawowa faktura online generuje FA(3).
+
+Zrobione
+-
+
+ROZBICIE COMMIT 04 - TASKI TECHNICZNE DO ODHACZANIA
+
+04.1 - Inwentaryzacja zalozen FA(2) w aktualnym mapperze
+Status: [ ]
+Cel
+- Zlokalizowac wszystkie twarde zalozenia zwiazane z FA(2), zanim zacznie sie przepisanie mappera.
+
+Do zrobienia
+- [ ] Wskazac elementy naglowka zalezne od FA(2).
+- [ ] Wskazac elementy stron transakcji zalezne od starego wariantu.
+- [ ] Wskazac pola kwotowe, pozycje i stale wartosci ustawiane "na sztywno".
+- [ ] Wskazac miejsca, gdzie mapper uzupelnia braki domeny zamiast tylko mapowac dane.
+
+Pliki do przegladu
+- app/integrations/ksef/mapper.py
+- tests/unit/test_ksef_mapper.py
+
+Definition of done
+- Jest lista miejsc, ktore trzeba zmienic lub usunac w ramach FA(3).
+
+Zrobione
+-
+
+04.2 - Ustalenie minimalnego kontraktu mapowania dla podstawowej FA(3)
+Status: [ ]
+Cel
+- Okreslic, jakie sekcje i pola podstawowej faktury online mapper musi generowac w pierwszym kroku.
+
+Do zrobienia
+- [ ] Spisac minimalny zestaw sekcji FA(3) dla standardowej faktury online.
+- [ ] Spisac mapowanie: pole domenowe -> element XML.
+- [ ] Oznaczyc pola obowiazkowe i opcjonalne.
+- [ ] Oznaczyc swiadomie pomijane obszary poza podstawowym zakresem online.
+
+Pliki docelowe
+- docs/dostosowywanieksef.txt
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Istnieje jawny kontrakt mapowania dla pierwszej wersji FA(3).
+
+Zrobione
+-
+
+04.3 - Przebudowa naglowka dokumentu
+Status: [ ]
+Cel
+- Zamienic naglowek dokumentu z wariantu FA(2) na FA(3) i usunac stale wartosci, ktore sa nieaktualne.
+
+Do zrobienia
+- [ ] Zmienic wariant formularza na zgodny z FA(3).
+- [ ] Zweryfikowac nazwy i polozenie elementow naglowka.
+- [ ] Zweryfikowac, ktore informacje systemowe maja zostac w dokumencie, a ktore sa tylko techniczne.
+- [ ] Usunac stale wartosci niezgodne z podr ecznikiem lub z nowym kontraktem danych.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Naglowek dokumentu odpowiada podstawowej strukturze FA(3).
+
+Zrobione
+-
+
+04.4 - Przebudowa mapowania stron transakcji
+Status: [ ]
+Cel
+- Uporzadkowac mapowanie sprzedawcy i nabywcy tak, aby wynikalo z modelu domenowego, a nie z obejsc w mapperze.
+
+Do zrobienia
+- [ ] Zweryfikowac mapowanie danych sprzedawcy.
+- [ ] Zweryfikowac mapowanie danych nabywcy.
+- [ ] Ograniczyc "domyslanie" brakujacych danych do minimum.
+- [ ] Upewnic sie, ze mapper nie przejmuje odpowiedzialnosci walidacyjnej serwisu domenowego.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Strony transakcji sa mapowane jednoznacznie z danych domenowych.
+
+Zrobione
+-
+
+04.5 - Przebudowa sekcji faktury i pozycji
+Status: [ ]
+Cel
+- Dopasowac sekcje glowne faktury, sumy i pozycje do podstawowego scenariusza FA(3).
+
+Do zrobienia
+- [ ] Zweryfikowac mapowanie numeru lokalnego, dat, waluty i rodzaju faktury.
+- [ ] Zweryfikowac mapowanie sum netto, VAT i brutto.
+- [ ] Zweryfikowac mapowanie pozycji faktury.
+- [ ] Upewnic sie, ze kolejnosc elementow jest stabilna i zgodna z oczekiwanym kontraktem.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Podstawowy dokument zawiera poprawne sekcje faktury i pozycje gotowe pod testy FA(3).
+
+Zrobione
+-
+
+04.6 - Oczyszczenie helperow mappera
+Status: [ ]
+Cel
+- Uproscic helpery tak, aby wspieraly dalsza rozbudowe mappera bez przepisywania od zera.
+
+Do zrobienia
+- [ ] Uporzadkowac helpery tworzace elementy XML.
+- [ ] Oddzielic formatowanie danych od logiki wyboru elementow.
+- [ ] Przygotowac miejsce pod przyszle sekcje dodatkowe bez rozbijania calego pliku.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+
+Definition of done
+- Kod mappera jest czytelniejszy i gotowy na kolejne rozszerzenia FA(3).
+
+Zrobione
+-
+
+04.7 - Wstepna walidacja struktury generowanego XML
+Status: [ ]
+Cel
+- Upewnic sie, ze nowy mapper generuje co najmniej syntaktycznie poprawny dokument i nie produkuje pustych lub uszkodzonych struktur.
+
+Do zrobienia
+- [ ] Sprawdzic poprawne generowanie XML dla scenariusza pozytywnego.
+- [ ] Ustalic zachowanie dla brakujacych danych krytycznych.
+- [ ] Zdecydowac, co ma byc bledem domenowym, a co bledem mapowania.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+- app/integrations/ksef/exceptions.py
+
+Definition of done
+- Mapper nie zwraca pozornie poprawnego dokumentu dla jawnie niespojnych danych.
+
+Zrobione
+-
+
+04.8 - Przeglad skutkow ubocznych dla workflow i klienta KSeF
+Status: [ ]
+Cel
+- Upewnic sie, ze zmiana dokumentu nie wymaga natychmiastowych ukrytych poprawek poza adapterem.
+
+Do zrobienia
+- [ ] Sprawdzic, czy submit handler nie zaklada formatu FA(2).
+- [ ] Sprawdzic, czy client KSeF nie zaklada starego formatu danych dokumentu.
+- [ ] Sprawdzic, czy logowanie, diagnostyka i request payload nie wymagaja korekty.
+
+Pliki do przegladu
+- app/worker/job_handlers/submit_invoice.py
+- app/integrations/ksef/client.py
+- tests/unit/test_submit_invoice_handler.py
+
+Definition of done
+- Zmiana mappera nie powoduje ukrytych regresji w integracji i workflow.
+
+Zrobione
+-
+
+04.9 - Minimalne zamkniecie Commit 04 przed wejsciem w Commit 05
+Status: [ ]
+Cel
+- Ustabilizowac implementacje mappera przed pelna aktualizacja testow FA(3).
+
+Do zrobienia
+- [ ] Uruchomic podstawowy zestaw testow mappera lub jego szkic po zmianie.
+- [ ] Sprawdzic, czy w kodzie nie zostaly stale "2" i odniesienia do FA(2).
+- [ ] Zapisac follow-upy, jesli pelna zgodnosc testowa ma wejsc dopiero w Commit 05.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+- tests/unit/test_ksef_mapper.py
+- docs/dostosowywanieksef.txt
+
+Definition of done
+- Commit 04 jest technicznie gotowy do tego, by Commit 05 skoncentrowal sie juz tylko na testach FA(3).
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 04
+- [ ] 04.1 wykonane
+- [ ] 04.2 wykonane
+- [ ] 04.3 wykonane
+- [ ] 04.4 wykonane
+- [ ] 04.5 wykonane
+- [ ] 04.6 wykonane
+- [ ] 04.7 wykonane
+- [ ] 04.8 wykonane
+- [ ] 04.9 wykonane
+
+COMMIT 05 - Aktualizacja testow mappera do FA(3)
+Status: [ ]
+Zakres
+- Usunac testy zakladajace FA(2).
+- Dodac testy naglowka, stron transakcji, sum i pozycji dla FA(3).
+
+Pliki docelowe
+- tests/unit/test_ksef_mapper.py
+
+Definition of done
+- Testy pilnuja FA(3), nie dawnej wersji dokumentu.
+
+Zrobione
+-
+
+COMMIT 06 - Walidacja XML i kontrakt adaptera KSeF
+Status: [ ]
+Zakres
+- Dodac lub zaostrzyc walidacje generowanego XML.
+- Uporzadkowac granice odpowiedzialnosci adaptera.
+
+Pliki docelowe
+- app/integrations/ksef/mapper.py
+- app/integrations/ksef/exceptions.py
+- tests/unit/test_ksef_mapper.py
+
+Definition of done
+- Bledny dokument jest wykrywany przed wysylka lub w jasno opisanym punkcie workflow.
+
+Zrobione
+-
+
+COMMIT 07 - Porzadki w modelu transmisji i statusach workflow
+Status: [ ]
+Zakres
+- Uporzadkowac statusy techniczne transmisji.
+- Doprecyzowac, ktory moment jest "submitted", a ktory "success".
+- Przygotowac miejsce na numer KSeF i UPO.
+
+Pliki docelowe
+- app/domain/enums.py
+- app/persistence/models/transmission.py
+- app/services/transmission_service.py
+- app/persistence/repositories/transmission_repository.py
+
+Definition of done
+- Statusy sa jednoznaczne i nadaja sie do dalszej orkiestracji.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 07 - TASKI TECHNICZNE DO ODHACZANIA
+
+07.1 - Inwentaryzacja aktualnych statusow i przejsc
+Status: [ ]
+Cel
+- Zrozumiec obecny lifecycle transmisji i faktury przed zmiana nazw oraz znaczen statusow.
+
+Do zrobienia
+- [ ] Spisac aktualne statusy TransmissionStatus.
+- [ ] Spisac aktualne statusy InvoiceStatus zwiazane z wysylka.
+- [ ] Spisac, gdzie w kodzie ustawiane sa statusy transmisji.
+- [ ] Spisac, gdzie w kodzie ustawiane sa statusy faktury powiazane z KSeF.
+- [ ] Wskazac miejsca, gdzie znaczenie statusu jest niejednoznaczne lub mylace.
+
+Pliki do przegladu
+- app/domain/enums.py
+- app/services/transmission_service.py
+- app/worker/job_handlers/submit_invoice.py
+- app/worker/job_handlers/poll_ksef_status.py
+- app/persistence/models/transmission.py
+
+Definition of done
+- Jest jawna lista statusow i miejsc ich uzycia.
+
+Zrobione
+-
+
+07.2 - Ustalenie docelowego modelu statusow transmisji
+Status: [ ]
+Cel
+- Ustalic jednoznacznie, co oznacza kazdy status techniczny i kiedy wolno do niego przejsc.
+
+Do zrobienia
+- [ ] Zdefiniowac znaczenie statusu queued.
+- [ ] Zdefiniowac znaczenie statusu processing.
+- [ ] Zdefiniowac znaczenie statusu submitted.
+- [ ] Zdefiniowac znaczenie statusu waiting_status lub zdecydowac o jego usunieciu.
+- [ ] Zdefiniowac znaczenie statusu success.
+- [ ] Zdefiniowac znaczenie failed_retryable i failed_permanent.
+- [ ] Spisac dozwolone przejscia miedzy statusami.
+
+Pliki docelowe
+- app/domain/enums.py
+- docs/dostosowywanieksef.txt
+
+Definition of done
+- Kazdy status ma jedno zdanie definicji i jawne przejscia.
+
+Zrobione
+-
+
+07.3 - Ustalenie granicy miedzy statusem technicznym a biznesowym
+Status: [ ]
+Cel
+- Nie mieszac statusow transmisji z biznesowym stanem faktury.
+
+Do zrobienia
+- [ ] Ustalic, kiedy faktura jest tylko "sending", a kiedy "accepted" lub "rejected".
+- [ ] Ustalic, czy numer KSeF i UPO naleza do stanu technicznego transmisji, czy takze do modelu biznesowego.
+- [ ] Ustalic, czy transmisja jest zrodlem prawdy, czy tylko kanalem technicznym.
+
+Pliki do przegladu
+- app/domain/models/invoice.py
+- app/services/transmission_service.py
+- app/worker/job_handlers/poll_ksef_status.py
+- app/persistence/models/transmission.py
+
+Definition of done
+- Wiadomo, co jest stanem faktury, a co stanem procesu technicznego.
+
+Zrobione
+-
+
+07.4 - Przebudowa enumow i nazw statusow
+Status: [ ]
+Cel
+- Wprowadzic docelowe nazwy i znaczenia do modelu kodu.
+
+Do zrobienia
+- [ ] Zmienic lub doprecyzowac TransmissionStatus.
+- [ ] Zmienic lub doprecyzowac logike przejsc po stronie faktury, jesli jest to potrzebne.
+- [ ] Usunac statusy martwe albo nieuzasadnione.
+
+Pliki docelowe
+- app/domain/enums.py
+- app/domain/models/invoice.py
+
+Definition of done
+- Enumy odzwierciedlaja realny workflow, a nie historyczne nazwy MVP.
+
+Zrobione
+-
+
+07.5 - Dopasowanie modelu transmisji w persystencji
+Status: [ ]
+Cel
+- Przygotowac model danych transmisji pod dalsze etapy, numer KSeF i UPO.
+
+Do zrobienia
+- [ ] Zweryfikowac pola status, external_reference, ksef_reference_number, error_code, error_message.
+- [ ] Zweryfikowac pola started_at, finished_at i next_retry_at.
+- [ ] Ustalic, czy potrzebne sa dodatkowe pola techniczne lub artefaktowe.
+- [ ] Przygotowac migracje, jesli zmieni sie schemat danych.
+
+Pliki docelowe
+- app/persistence/models/transmission.py
+- alembic/versions/
+
+Definition of done
+- Model transmisji wspiera docelowy lifecycle ETAP 3 i ETAP 4.
+
+Zrobione
+-
+
+07.6 - Dopasowanie repozytorium i uslug do nowego lifecycle
+Status: [ ]
+Cel
+- Przeniesc nowe zasady statusow do warstwy odczytu i zapisu, bez rozjazdu miedzy modelem a workflow.
+
+Do zrobienia
+- [ ] Zweryfikowac get_active_for_invoice i podobne metody repozytorium.
+- [ ] Dopasowac logike tworzenia transmisji w TransmissionService.
+- [ ] Dopasowac logike retry_transmission do nowego modelu statusow.
+- [ ] Upewnic sie, ze aktywna transmisja jest rozumiana jednoznacznie.
+
+Pliki docelowe
+- app/services/transmission_service.py
+- app/persistence/repositories/transmission_repository.py
+
+Definition of done
+- Serwis i repozytorium stosuja ten sam model przejsc statusow.
+
+Zrobione
+-
+
+07.7 - Dopasowanie job handlerow do nowego znaczenia statusow
+Status: [ ]
+Cel
+- Upewnic sie, ze submit i polling nie ustawiaj a statusow w sprzeczny sposob.
+
+Do zrobienia
+- [ ] Zweryfikowac status ustawiany przy rozpoczeciu wysylki.
+- [ ] Zweryfikowac status ustawiany po przyjeciu przez API KSeF.
+- [ ] Zweryfikowac status ustawiany podczas oczekiwania na wynik.
+- [ ] Zweryfikowac status ustawiany po bledzie przejsciowym i permanentnym.
+
+Pliki docelowe
+- app/worker/job_handlers/submit_invoice.py
+- app/worker/job_handlers/poll_ksef_status.py
+
+Definition of done
+- Job handlery nie produkuja niespojnych lub skaczacych statusow.
+
+Zrobione
+-
+
+07.8 - Przeglad skutkow ubocznych dla API i UI
+Status: [ ]
+Cel
+- Upewnic sie, ze zmiana statusow nie rozwala prezentacji i kontraktow z klientem.
+
+Do zrobienia
+- [ ] Sprawdzic odpowiedzi API dla transmisji.
+- [ ] Sprawdzic odpowiedzi API dla faktury i jej statusow.
+- [ ] Sprawdzic etykiety statusow w pdf_service i w UI.
+
+Pliki do przegladu
+- app/api/routers/transmissions.py
+- app/api/routers/invoices.py
+- app/services/pdf_service.py
+- frontend/
+
+Definition of done
+- Zmiana statusow ma przewidywalny efekt w warstwie prezentacji.
+
+Zrobione
+-
+
+07.9 - Minimalny pakiet testow zamykajacych Commit 07
+Status: [ ]
+Cel
+- Zamknac porzadki workflow testami przed wejsciem w numer KSeF i UPO.
+
+Do zrobienia
+- [ ] Dodac testy przejsc statusow transmisji.
+- [ ] Dodac testy aktywnej transmisji dla faktury.
+- [ ] Dodac testy retry zgodne z nowym lifecycle.
+- [ ] Dodac testy zgodnosci statusu faktury i statusu transmisji.
+
+Pliki docelowe
+- tests/unit/test_transmission_service.py
+- tests/unit/test_submit_invoice_handler.py
+- tests/unit/test_poll_ksef_status_handler.py
+- tests/unit/test_invoice_transitions.py
+
+Definition of done
+- Commit 07 stabilizuje workflow i przygotowuje grunt pod Commit 08 i 09.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 07
+- [ ] 07.1 wykonane
+- [ ] 07.2 wykonane
+- [ ] 07.3 wykonane
+- [ ] 07.4 wykonane
+- [ ] 07.5 wykonane
+- [ ] 07.6 wykonane
+- [ ] 07.7 wykonane
+- [ ] 07.8 wykonane
+- [ ] 07.9 wykonane
+
+COMMIT 08 - Domkniecie wysylki: numer KSeF po sukcesie
+Status: [ ]
+Zakres
+- Po sukcesie przetwarzania zapisac numer KSeF.
+- Powiazac go z wynikiem transmisji i ekspozycja w modelu.
+
+Pliki docelowe
+- app/integrations/ksef/client.py
+- app/worker/job_handlers/poll_ksef_status.py
+- app/persistence/models/transmission.py
+- app/services/transmission_service.py
+
+Definition of done
+- Po statusie 200 system ma zapisany numer KSeF.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 08 - TASKI TECHNICZNE DO ODHACZANIA
+
+08.1 - Ustalenie zrodla prawdy dla numeru KSeF
+Status: [ ]
+Cel
+- Jednoznacznie zdecydowac, gdzie numer KSeF ma byc przechowywany i skad ma byc czytany.
+
+Do zrobienia
+- [ ] Ustalic, czy numer KSeF jest polem tylko transmisji, czy takze faktury.
+- [ ] Ustalic, czy transmisja pozostaje technicznym rekordem historii, a faktura dostaje aktualny wynik biznesowy.
+- [ ] Spisac konsekwencje dla ETAP 4 i dalszego API.
+
+Pliki do przegladu
+- app/persistence/models/transmission.py
+- app/persistence/models/invoice.py
+- app/services/transmission_service.py
+- app/domain/models/invoice.py
+
+Definition of done
+- Wiadomo, gdzie docelowo mieszka numer KSeF i jak bedzie propagowany.
+
+Zrobione
+-
+
+08.2 - Zweryfikowanie odpowiedzi KSeF i momentu, w ktorym numer jest wiarygodny
+Status: [ ]
+Cel
+- Ustalic, w ktorym punkcie procesu numer KSeF staje sie ostatecznie dostepny.
+
+Do zrobienia
+- [ ] Zweryfikowac odpowiedz statusowa klienta KSeF.
+- [ ] Ustalic, czy numer jest pobierany z odpowiedzi statusu czy innego artefaktu.
+- [ ] Ustalic, co robic, jesli status jest sukcesem, ale numer nie zostal zwrocony.
+
+Pliki do przegladu
+- app/integrations/ksef/client.py
+- app/worker/job_handlers/poll_ksef_status.py
+
+Definition of done
+- Istnieje jawna regu la: kiedy zapisujemy numer KSeF, a kiedy nie.
+
+Zrobione
+-
+
+08.3 - Przygotowanie modelu danych pod numer KSeF
+Status: [ ]
+Cel
+- Dopasowac model transmisji i ewentualnie faktury do przechowywania numeru KSeF.
+
+Do zrobienia
+- [ ] Zweryfikowac pole ksef_reference_number w transmisji.
+- [ ] Zdecydowac, czy dodac numer KSeF rowniez do modelu faktury lub modelu read model.
+- [ ] Przygotowac migracje, jesli schema wymaga zmiany.
+
+Pliki docelowe
+- app/persistence/models/transmission.py
+- app/persistence/models/invoice.py
+- alembic/versions/
+
+Definition of done
+- Model danych jest gotowy na stabilne przechowywanie numeru KSeF.
+
+Zrobione
+-
+
+08.4 - Zapis numeru KSeF w job handlerze pollingu
+Status: [ ]
+Cel
+- Domknac moment sukcesu procesu przez utrwalenie numeru KSeF w polling handlerze.
+
+Do zrobienia
+- [ ] Zapisac numer KSeF po statusie sukcesu.
+- [ ] Upewnic sie, ze zapis nast epuje tylko przy poprawnym stanie procesu.
+- [ ] Upewnic sie, ze numer nie jest nadpisywany niespojnie przy ponownych wywolaniach.
+
+Pliki docelowe
+- app/worker/job_handlers/poll_ksef_status.py
+
+Definition of done
+- Po sukcesie numer KSeF jest utrwalony w sposob idempotentny.
+
+Zrobione
+-
+
+08.5 - Propagacja numeru KSeF do warstwy serwisowej
+Status: [ ]
+Cel
+- Upewnic sie, ze warstwa odczytu i logika biznesowa moga zobaczyc numer KSeF bez recznego skladania danych.
+
+Do zrobienia
+- [ ] Dopasowac service/repository do odczytu numeru KSeF.
+- [ ] Ustalic, czy numer ma byc zwracany w odpowiedzi dotyczacej faktury, transmisji czy obu.
+- [ ] Zapisac follow-up, jesli pelna ekspozycja ma wejsc dopiero w Commit 11.
+
+Pliki docelowe
+- app/services/transmission_service.py
+- app/persistence/repositories/transmission_repository.py
+- app/persistence/repositories/invoice_repository.py
+
+Definition of done
+- Numer KSeF nie jest uwięziony tylko w pojedynczym handlerze.
+
+Zrobione
+-
+
+08.6 - Obsloga przypadkow brzegowych dla numeru KSeF
+Status: [ ]
+Cel
+- Zabezpieczyc workflow na przypadek niepelnej lub niespojnej odpowiedzi.
+
+Do zrobienia
+- [ ] Okreslic zachowanie przy sukcesie bez numeru KSeF.
+- [ ] Okreslic zachowanie przy probie ponownego zapisu innego numeru.
+- [ ] Okreslic zachowanie dla retry po czesciowym sukcesie.
+
+Pliki do przegladu
+- app/worker/job_handlers/poll_ksef_status.py
+- app/services/transmission_service.py
+
+Definition of done
+- Zachowanie dla sytuacji nietypowych jest jawne i testowalne.
+
+Zrobione
+-
+
+08.7 - Minimalny pakiet testow zamykajacych Commit 08
+Status: [ ]
+Cel
+- Zamknac implementacje numeru KSeF testami zanim zacznie sie pelne pobieranie UPO.
+
+Do zrobienia
+- [ ] Test zapisu numeru KSeF po sukcesie.
+- [ ] Test braku numeru mimo statusu sukcesu.
+- [ ] Test idempotentnego zachowania przy ponownym pollingu.
+
+Pliki docelowe
+- tests/unit/test_poll_ksef_status_handler.py
+- tests/unit/test_transmission_service.py
+
+Definition of done
+- Commit 08 stabilizuje numer KSeF i przygotowuje grunt pod Commit 09.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 08
+- [ ] 08.1 wykonane
+- [ ] 08.2 wykonane
+- [ ] 08.3 wykonane
+- [ ] 08.4 wykonane
+- [ ] 08.5 wykonane
+- [ ] 08.6 wykonane
+- [ ] 08.7 wykonane
+
+COMMIT 09 - Domkniecie wysylki: pobranie i zapis UPO
+Status: [ ]
+Zakres
+- Pobierac UPO po sukcesie faktury.
+- Utrwalic UPO i jego status pobrania.
+
+Pliki docelowe
+- app/integrations/ksef/client.py
+- app/worker/job_handlers/poll_ksef_status.py
+- app/persistence/models/transmission.py
+- ewentualnie nowy model przechowywania artefaktu UPO
+
+Definition of done
+- UPO nie jest tylko potencjalnie dostepne w kodzie, ale rzeczywiscie pobierane i zapisane.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 09 - TASKI TECHNICZNE DO ODHACZANIA
+
+09.1 - Ustalenie modelu przechowywania UPO
+Status: [ ]
+Cel
+- Zdecydowac, gdzie i w jakiej postaci przechowywac UPO, aby bylo dostepne operacyjnie i nie komplikowalo modelu.
+
+Do zrobienia
+- [ ] Ustalic, czy UPO trzymamy w transmisji, osobnej tabeli artefaktow czy w osobnym magazynie plikow.
+- [ ] Ustalic format przechowywania: bytes, text, blob, reference do pliku.
+- [ ] Ustalic, czy trzymamy tylko ostatnie UPO, czy pelna historie artefaktow.
+
+Pliki do przegladu
+- app/persistence/models/transmission.py
+- ewentualny nowy model artefaktu
+- docs/dostosowywanieksef.txt
+
+Definition of done
+- Jest jedna decyzja architektoniczna, gdzie mieszka UPO i dlaczego.
+
+Zrobione
+-
+
+09.2 - Zweryfikowanie kontraktu klienta KSeF dla pobierania UPO
+Status: [ ]
+Cel
+- Upewnic sie, ze klient KSeF zwraca UPO w postaci gotowej do bezpiecznego zapisu.
+
+Do zrobienia
+- [ ] Zweryfikowac metode get_upo i jej kontrakt wyjsciowy.
+- [ ] Ustalic zachowanie dla pustej odpowiedzi lub bledu po sukcesie numeru KSeF.
+- [ ] Ustalic, czy pobranie UPO jest synchroniczne po sukcesie, czy moze byc odroczone.
+
+Pliki docelowe
+- app/integrations/ksef/client.py
+
+Definition of done
+- Wiadomo, jak pobieramy UPO i co oznacza niepowodzenie pobrania.
+
+Zrobione
+-
+
+09.3 - Przygotowanie modelu danych i migracji pod UPO
+Status: [ ]
+Cel
+- Dodac miejsce na zapis UPO i stanu jego pobrania.
+
+Do zrobienia
+- [ ] Dodac pole lub model przechowujacy UPO.
+- [ ] Dodac pole statusu pobrania UPO lub inny mechanizm sledzenia.
+- [ ] Przygotowac migracje schematu bazy.
+
+Pliki docelowe
+- app/persistence/models/transmission.py
+- ewentualny nowy model ORM
+- alembic/versions/
+
+Definition of done
+- Schemat danych wspiera realny zapis UPO oraz informacje, czy pobranie sie udalo.
+
+Zrobione
+-
+
+09.4 - Pobranie UPO po sukcesie numeru KSeF
+Status: [ ]
+Cel
+- Dopiac workflow tak, aby po sukcesie mozna bylo faktycznie pobrac UPO.
+
+Do zrobienia
+- [ ] Wywolac pobranie UPO w odpowiednim momencie workflow.
+- [ ] Upewnic sie, ze pobranie nast epuje dopiero po uzyskaniu numeru KSeF.
+- [ ] Upewnic sie, ze awaria pobrania UPO nie powoduje utraty numeru KSeF.
+
+Pliki docelowe
+- app/worker/job_handlers/poll_ksef_status.py
+
+Definition of done
+- Workflow po sukcesie numeru KSeF przechodzi do proby pobrania UPO w kontrolowany sposob.
+
+Zrobione
+-
+
+09.5 - Zapis UPO i statusu pobrania
+Status: [ ]
+Cel
+- Utrwalic UPO oraz rozroznic: pobrano, nie pobrano, blad pobrania.
+
+Do zrobienia
+- [ ] Zapisac tresc UPO.
+- [ ] Zapisac status pobrania UPO.
+- [ ] Ustalic zachowanie przy ponownej probie pobrania tego samego UPO.
+
+Pliki docelowe
+- app/persistence/models/transmission.py
+- app/worker/job_handlers/poll_ksef_status.py
+
+Definition of done
+- UPO ma trwa ly zapis i kontrolowalny stan pobrania.
+
+Zrobione
+-
+
+09.6 - Obsluga przypadkow brzegowych dla UPO
+Status: [ ]
+Cel
+- Nie dopuscic do sytuacji, w ktorej sukces faktury jest mylony z sukcesem pobrania UPO.
+
+Do zrobienia
+- [ ] Ustalic zachowanie przy braku UPO mimo numeru KSeF.
+- [ ] Ustalic zachowanie przy timeout lub bledzie sieciowym pobierania UPO.
+- [ ] Ustalic, czy potrzebny jest osobny retry dla UPO.
+
+Pliki do przegladu
+- app/worker/job_handlers/poll_ksef_status.py
+- app/services/transmission_service.py
+- app/domain/enums.py
+
+Definition of done
+- Numer KSeF i UPO sa rozdzielone logicznie, a awaria pobrania UPO nie zaciemnia wyniku faktury.
+
+Zrobione
+-
+
+09.7 - Przygotowanie pod ekspozycje UPO w ETAP 4
+Status: [ ]
+Cel
+- Uporzadkowac dane tak, aby Commit 12 mogl tylko wystawic UPO, a nie dopiero porzadkowac zapis.
+
+Do zrobienia
+- [ ] Ustalic sposob identyfikacji i pobrania UPO po API.
+- [ ] Ustalic podstawowe zasady autoryzacji do UPO.
+- [ ] Zapisac follow-up, jesli ekspozycja ma wejsc dopiero w Commit 12.
+
+Pliki do przegladu
+- app/api/routers/transmissions.py
+- app/api/routers/invoices.py
+- app/schemas/transmission.py
+
+Definition of done
+- Dane i kontrakty sa przygotowane pod pozniejsza ekspozycje UPO.
+
+Zrobione
+-
+
+09.8 - Minimalny pakiet testow zamykajacych Commit 09
+Status: [ ]
+Cel
+- Zamknac obsluge UPO testami, zanim zacznie sie ekspozycja w API i UI.
+
+Do zrobienia
+- [ ] Test pobrania i zapisu UPO po sukcesie.
+- [ ] Test bledu pobrania UPO przy zachowanym numerze KSeF.
+- [ ] Test ponownej proby pobrania UPO.
+
+Pliki docelowe
+- tests/unit/test_poll_ksef_status_handler.py
+- tests/unit/test_ksef_client_retry.py
+- tests/unit/test_transmission_service.py
+
+Definition of done
+- Commit 09 stabilizuje artefakt UPO i przygotowuje grunt pod Commit 10 i 12.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 09
+- [ ] 09.1 wykonane
+- [ ] 09.2 wykonane
+- [ ] 09.3 wykonane
+- [ ] 09.4 wykonane
+- [ ] 09.5 wykonane
+- [ ] 09.6 wykonane
+- [ ] 09.7 wykonane
+- [ ] 09.8 wykonane
+
+COMMIT 10 - Testy workflow submit -> status -> numer KSeF -> UPO
+Status: [ ]
+Zakres
+- Dodac testy pozytywnej sciezki i bledow przejsciowych.
+- Sprawdzic retry i zachowanie po sukcesie koncowym.
+
+Pliki docelowe
+- tests/unit/test_submit_invoice_handler.py
+- tests/unit/test_poll_ksef_status_handler.py
+- tests/unit/test_ksef_client_retry.py
+
+Definition of done
+- Istnieje testowa sciezka procesu od wysylki do pobrania UPO.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 10 - TASKI TECHNICZNE DO ODHACZANIA
+
+10.1 - Ustalenie docelowych scenariuszy testowych workflow
+Status: [ ]
+Cel
+- Zdecydowac, jakie scenariusze musza zostac pokryte, aby uznac workflow KSeF za podstawowo zabezpieczony testami.
+
+Do zrobienia
+- [ ] Zdefiniowac scenariusz pozytywny end-to-end.
+- [ ] Zdefiniowac scenariusz bledu przejsciowego przy submit.
+- [ ] Zdefiniowac scenariusz bledu przejsciowego przy pollingu.
+- [ ] Zdefiniowac scenariusz sukcesu z numerem KSeF i UPO.
+- [ ] Zdefiniowac scenariusz sukcesu z numerem KSeF, ale z bledem pobrania UPO.
+
+Pliki docelowe
+- docs/dostosowywanieksef.txt
+- tests/unit/
+
+Definition of done
+- Jest jawna lista scenariuszy, ktore musza przejsc przed zamknieciem ETAP 4.
+
+Zrobione
+-
+
+10.2 - Testy submit handlera
+Status: [ ]
+Cel
+- Pokryc moment wysylki i przejscia statusow po stronie submit handlera.
+
+Do zrobienia
+- [ ] Test rozpoczecia wysylki i ustawienia statusu technicznego.
+- [ ] Test sukcesu wysylki i utworzenia zadania pollingu.
+- [ ] Test bledu przejsciowego.
+- [ ] Test bledu permanentnego.
+
+Pliki docelowe
+- tests/unit/test_submit_invoice_handler.py
+
+Definition of done
+- Submit handler ma stabilne testy dla glownego i ble dnych przebiegow.
+
+Zrobione
+-
+
+10.3 - Testy pollingu statusu
+Status: [ ]
+Cel
+- Pokryc przejscie od statusu przetwarzania do wyniku koncowego KSeF.
+
+Do zrobienia
+- [ ] Test statusu sukcesu i zapisu numeru KSeF.
+- [ ] Test statusu sukcesu i pobrania UPO.
+- [ ] Test bledu permanentnego.
+- [ ] Test scenariusza oczekiwania i kolejnego retry.
+
+Pliki docelowe
+- tests/unit/test_poll_ksef_status_handler.py
+
+Definition of done
+- Polling handler ma pokryty pozytywny i negatywny lifecycle.
+
+Zrobione
+-
+
+10.4 - Testy klienta KSeF i retry
+Status: [ ]
+Cel
+- Zweryfikowac zachowanie klienta HTTP dla wysylki, statusu i UPO.
+
+Do zrobienia
+- [ ] Test retry dla send_invoice.
+- [ ] Test retry lub obslugi bledu dla get_invoice_status.
+- [ ] Test kontraktu dla get_upo.
+- [ ] Test klasyfikacji bledow transient/permanent.
+
+Pliki docelowe
+- tests/unit/test_ksef_client_retry.py
+
+Definition of done
+- Zachowanie klienta KSeF jest przewidywalne i osloniete testami.
+
+Zrobione
+-
+
+10.5 - Test spojnosci statusu faktury, transmisji i artefaktow
+Status: [ ]
+Cel
+- Upewnic sie, ze stan faktury, transmisji, numeru KSeF i UPO jest spojny.
+
+Do zrobienia
+- [ ] Test relacji faktura accepted <-> transmisja success.
+- [ ] Test relacji faktura rejected <-> transmisja failed_permanent.
+- [ ] Test zachowania przy sukcesie numeru KSeF bez UPO.
+
+Pliki docelowe
+- tests/unit/test_transmission_service.py
+- tests/unit/test_invoice_transitions.py
+
+Definition of done
+- Testy pilnuja spojnosci biznesowej, nie tylko technicznej.
+
+Zrobione
+-
+
+10.6 - Minimalny test przebiegu end-to-end w logice aplikacji
+Status: [ ]
+Cel
+- Miec jeden test skladajacy caly podstawowy przeplyw od create do wyniku KSeF.
+
+Do zrobienia
+- [ ] Utworzenie faktury.
+- [ ] Oznaczenie jako gotowa.
+- [ ] Utworzenie transmisji.
+- [ ] Sukces wysylki i pollingu.
+- [ ] Numer KSeF i UPO na koncu procesu.
+
+Pliki docelowe
+- tests/unit/test_invoice_api.py
+- ewentualnie nowy test integracyjny workflow
+
+Definition of done
+- Jest co najmniej jeden test, ktory przechodzi przez caly podstawowy proces KSeF.
+
+Zrobione
+-
+
+10.7 - Oczyszczenie testow po zmianach architektonicznych
+Status: [ ]
+Cel
+- Usunac testy zakladajace stare zachowanie i doprowadzic suite do spojnosci.
+
+Do zrobienia
+- [ ] Usunac lub poprawic testy oparte o FA(2) i stare statusy.
+- [ ] Uporzadkowac fixture'y i helpery testowe.
+- [ ] Upewnic sie, ze nazwy testow odpowiadaja nowemu workflow.
+
+Pliki docelowe
+- tests/unit/
+
+Definition of done
+- Test suite opisuje aktualny system, a nie historyczne MVP.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 10
+- [ ] 10.1 wykonane
+- [ ] 10.2 wykonane
+- [ ] 10.3 wykonane
+- [ ] 10.4 wykonane
+- [ ] 10.5 wykonane
+- [ ] 10.6 wykonane
+- [ ] 10.7 wykonane
+
+COMMIT 11 - Ekspozycja numeru KSeF w API i modelach odpowiedzi
+Status: [ ]
+Zakres
+- Dodac numer KSeF do odpowiedzi API tam, gdzie ma sens biznesowy.
+- Upewnic sie, ze klient nie musi czytac surowej transmisji, by zobaczyc wynik KSeF.
+
+Pliki docelowe
+- app/schemas/invoice.py
+- app/schemas/transmission.py
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+
+Definition of done
+- Numer KSeF jest widoczny dla uzytkownika przez API.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 11 - TASKI TECHNICZNE DO ODHACZANIA
+
+11.1 - Ustalenie miejsc ekspozycji numeru KSeF
+Status: [ ]
+Cel
+- Zdecydowac, w ktorych odpowiedziach API numer KSeF ma byc widoczny i w jakiej formie.
+
+Do zrobienia
+- [ ] Ustalic, czy numer KSeF ma byc zwracany w odpowiedzi faktury.
+- [ ] Ustalic, czy numer KSeF ma byc zwracany w odpowiedzi transmisji.
+- [ ] Ustalic, czy ma byc widoczny na listach czy tylko w detalach.
+
+Pliki do przegladu
+- app/schemas/invoice.py
+- app/schemas/transmission.py
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+
+Definition of done
+- Istnieje jeden spójny kontrakt API dla numeru KSeF.
+
+Zrobione
+-
+
+11.2 - Rozszerzenie schematow odpowiedzi
+Status: [ ]
+Cel
+- Dodac numer KSeF do modeli odpowiedzi bez rozbijania zgodnosci kontraktu API.
+
+Do zrobienia
+- [ ] Zaktualizowac InvoiceResponse.
+- [ ] Zaktualizowac TransmissionResponse.
+- [ ] Dopasowac list responses, jesli numer ma byc widoczny na listach.
+
+Pliki docelowe
+- app/schemas/invoice.py
+- app/schemas/transmission.py
+
+Definition of done
+- Schematy odpowiedzi umieja przenosic numer KSeF.
+
+Zrobione
+-
+
+11.3 - Dopasowanie warstwy odczytu i routerow
+Status: [ ]
+Cel
+- Wystawic numer KSeF w endpointach bez recznego skladania danych w wielu miejscach.
+
+Do zrobienia
+- [ ] Dopasowac endpointy invoices.
+- [ ] Dopasowac endpointy transmissions.
+- [ ] Upewnic sie, ze zrodlo danych dla numeru KSeF jest stale i przewidywalne.
+
+Pliki docelowe
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/services/transmission_service.py
+- app/persistence/repositories/
+
+Definition of done
+- API zwraca numer KSeF w uzgodnionych miejscach bez logiki ad hoc w routerach.
+
+Zrobione
+-
+
+11.4 - Ustalenie semantyki numeru KSeF po stronie klienta
+Status: [ ]
+Cel
+- Uniknac sytuacji, w ktorej klient API dostaje numer KSeF, ale nie wie, kiedy jest on ostateczny.
+
+Do zrobienia
+- [ ] Ustalic, przy jakim statusie numer jest uznawany za finalny.
+- [ ] Ustalic, czy numer moze byc null i co to oznacza.
+- [ ] Ustalic, jakie pola statusowe trzeba pokazywac razem z numerem KSeF.
+
+Pliki do przegladu
+- app/schemas/invoice.py
+- app/schemas/transmission.py
+- app/domain/enums.py
+
+Definition of done
+- Kontrakt API jasno komunikuje znaczenie numeru KSeF i jego brak.
+
+Zrobione
+-
+
+11.5 - Testy kontraktowe API dla numeru KSeF
+Status: [ ]
+Cel
+- Zabezpieczyc ekspozycje numeru KSeF przed regresja.
+
+Do zrobienia
+- [ ] Test odpowiedzi detalu faktury z numerem KSeF.
+- [ ] Test odpowiedzi detalu transmisji z numerem KSeF.
+- [ ] Test przypadku, gdy numer nie jest jeszcze dostepny.
+
+Pliki docelowe
+- tests/unit/test_invoice_api.py
+- tests/unit/test_invoice_service.py
+- tests/unit/test_transmission_service.py
+
+Definition of done
+- API zwraca numer KSeF zgodnie z uzgodnionym kontraktem.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 11
+- [ ] 11.1 wykonane
+- [ ] 11.2 wykonane
+- [ ] 11.3 wykonane
+- [ ] 11.4 wykonane
+- [ ] 11.5 wykonane
+
+COMMIT 12 - Ekspozycja UPO i czytelnego wyniku w UI/API
+Status: [ ]
+Zakres
+- Dodac pobieranie UPO z poziomu API.
+- Uczytelnic statusy i wynik procesu w UI lub w warstwie prezentacji.
+
+Pliki docelowe
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/services/pdf_service.py
+- frontend/
+
+Definition of done
+- Uzytkownik widzi efekt integracji i moze pobrac artefakty.
+
+Zrobione
+-
+
+ROZBICIE COMMIT 12 - TASKI TECHNICZNE DO ODHACZANIA
+
+12.1 - Ustalenie sposobu pobierania UPO przez API
+Status: [ ]
+Cel
+- Zdecydowac, jak klient ma pobierac UPO i z jakiego endpointu.
+
+Do zrobienia
+- [ ] Ustalic, czy UPO pobieramy przez endpoint faktury, transmisji czy osobny endpoint artefaktow.
+- [ ] Ustalic format odpowiedzi: download, bytes, XML content, metadata.
+- [ ] Ustalic zasady autoryzacji do pobierania UPO.
+
+Pliki do przegladu
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/schemas/transmission.py
+
+Definition of done
+- Istnieje jeden spójny kontrakt API dla pobierania UPO.
+
+Zrobione
+-
+
+12.2 - Implementacja ekspozycji UPO w warstwie API
+Status: [ ]
+Cel
+- Wystawic zapisane UPO do pobrania przez klienta.
+
+Do zrobienia
+- [ ] Dodac endpoint lub rozszerzyc istniejący endpoint o pobranie UPO.
+- [ ] Dodac potrzebne schematy odpowiedzi lub response classes.
+- [ ] Upewnic sie, ze brak UPO jest obslugiwany czytelnym bledem.
+
+Pliki docelowe
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/schemas/transmission.py
+
+Definition of done
+- Zapisane UPO mozna pobrac przez API w kontrolowany sposob.
+
+Zrobione
+-
+
+12.3 - Uczytelnienie wyniku procesu w odpowiedziach API
+Status: [ ]
+Cel
+- Sprawic, by klient API widzial nie tylko surowe statusy, ale sensowny wynik integracji.
+
+Do zrobienia
+- [ ] Zweryfikowac, jakie pola wyniku powinny byc zwracane obok numeru KSeF i UPO.
+- [ ] Ustalic, czy potrzebny jest status biznesowy lub etykieta wyniku.
+- [ ] Uporzadkowac kontrakt odpowiedzi dla faktury i transmisji.
+
+Pliki docelowe
+- app/schemas/invoice.py
+- app/schemas/transmission.py
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+
+Definition of done
+- Odpowiedzi API sa czytelne dla klienta bez znajomosci szczegolow workflow wewnetrznego.
+
+Zrobione
+-
+
+12.4 - Prezentacja statusow i wyniku w warstwie UI
+Status: [ ]
+Cel
+- Pokazac uzytkownikowi wynik integracji KSeF w sposob praktyczny, a nie tylko techniczny.
+
+Do zrobienia
+- [ ] Zweryfikowac etykiety statusow w pdf_service.
+- [ ] Dodac numer KSeF do widokow, jesli jeszcze go nie ma.
+- [ ] Dodac informacje o dostepnosci UPO.
+- [ ] Zweryfikowac, czy frontend pokazuje finalny wynik procesu, a nie tylko lokalny status faktury.
+
+Pliki docelowe
+- app/services/pdf_service.py
+- frontend/
+
+Definition of done
+- UI pokazuje, czy faktura trafila do KSeF i jakie artefakty sa dostepne.
+
+Zrobione
+-
+
+12.5 - Obsluga przypadkow brzegowych w ekspozycji UPO i wyniku
+Status: [ ]
+Cel
+- Nie dopuscic do mylacej prezentacji danych uzytkownikowi.
+
+Do zrobienia
+- [ ] Ustalic zachowanie przy numerze KSeF bez UPO.
+- [ ] Ustalic zachowanie przy pending processing.
+- [ ] Ustalic zachowanie przy failed_permanent i failed_retryable.
+- [ ] Ustalic komunikaty dla braku dostepu do UPO.
+
+Pliki do przegladu
+- app/api/routers/invoices.py
+- app/api/routers/transmissions.py
+- app/services/pdf_service.py
+- frontend/
+
+Definition of done
+- Warstwa prezentacji komunikuje prawdziwy stan procesu bez wprowadzania uzytkownika w blad.
+
+Zrobione
+-
+
+12.6 - Testy kontraktowe i prezentacyjne dla UPO oraz wyniku integracji
+Status: [ ]
+Cel
+- Zabezpieczyc ekspozycje API/UI przed regresja po wdrozeniu numeru KSeF i UPO.
+
+Do zrobienia
+- [ ] Test endpointu pobrania UPO.
+- [ ] Test odpowiedzi API dla faktury i transmisji po sukcesie.
+- [ ] Test odpowiedzi API dla przypadku braku UPO.
+- [ ] Test warstwy prezentacji lub co najmniej logiki formatujacej wynik.
+
+Pliki docelowe
+- tests/unit/test_invoice_api.py
+- tests/unit/test_transmission_service.py
+- tests/unit/test_invoice_service.py
+- ewentualnie testy frontendu
+
+Definition of done
+- API i UI prezentuja wynik KSeF w sposob stabilny i testowalny.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA DLA COMMIT 12
+- [ ] 12.1 wykonane
+- [ ] 12.2 wykonane
+- [ ] 12.3 wykonane
+- [ ] 12.4 wykonane
+- [ ] 12.5 wykonane
+- [ ] 12.6 wykonane
+
+COMMIT 13 - Porzadki koncowe ETAP 0-4
+Status: [ ]
+Zakres
+- Uporzadkowac nazwy, komentarze i dokumentacje techniczna.
+- Usunac pozostalosci po FA(2), jesli jeszcze gdzies zostaly.
+- Sprawdzic spojnos c testow i endpointow.
+
+Pliki docelowe
+- caly zakres ETAP 0-4
+
+Definition of done
+- Nie ma sprzecznych zalozen FA(2) i FA(3) w podstawowym workflow.
+- ETAP 0-4 mozna oznaczyc jako wykonany albo swiadomie zakonczony na uzgodnionym poziomie.
+
+Zrobione
+-
+
+CHECKLISTA ZBIORCZA ETAP 0-4
+- [ ] Commit 01 wykonany
+- [ ] Commit 02 wykonany
+- [ ] Commit 03 wykonany
+- [ ] Commit 04 wykonany
+- [ ] Commit 05 wykonany
+- [ ] Commit 06 wykonany
+- [ ] Commit 07 wykonany
+- [ ] Commit 08 wykonany
+- [ ] Commit 09 wykonany
+- [ ] Commit 10 wykonany
+- [ ] Commit 11 wykonany
+- [ ] Commit 12 wykonany
+- [ ] Commit 13 wykonany
+
+UWAGA PRAKTYCZNA
+- Jesli trzeba skrocic zakres, mozna zakonczyc po Commit 10 i traktowac Commit 11-12 jako kolejny mini-etap.
+- Jesli wyjdzie, ze domena faktury wymaga wiekszej przebudowy, Commit 02 mozna rozbic na kilka mniejszych commitow, ale nie nalezy wtedy przeskakiwac do mappera przed ustabilizowaniem modelu danych.
+
+Ostatnia aktualizacja
+- 2026-04-06

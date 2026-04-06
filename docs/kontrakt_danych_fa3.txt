@@ -1,0 +1,230 @@
+KONTRAKT DANYCH - FAKTURA ONLINE FA(3)
+Etap 0 / Commit 01 - podstawowy scenariusz online (RodzajFaktury=VAT, sesja interaktywna)
+Wersja: 1.0 | Data: 2026-04-06
+================================================================================
+
+Ten dokument jest artefaktem wykonawczym etapu 0.
+Sluzy jako zrodlo prawdy dla prac w etapach 1-4 (Commit 02-12).
+Przed zmiana modelu domenowego lub mappera - sprawdz ten plik.
+
+LEGENDA STATUSOW
+  OK       = pole istnieje, mapper generuje poprawnie
+  ZMIANA   = pole istnieje w domenie, ale mapper wymaga aktualizacji
+  BRAK     = pole nie istnieje w domenie ani ORM, trzeba dodac
+  HARDKOD  = wartosc hardkodowana w mapperze, wymaga weryfikacji
+  ODLOZONE = poza zakresem pierwszego wdrozenia (patrz Sekcja 3)
+
+================================================================================
+SEKCJA 1 - TABELA KONTRAKTU: pole biznesowe -> zrodlo danych -> element FA(3)
+================================================================================
+
+---
+1.1 NAGLOWEK XML (Nagłówek)
+---
+
+Pole biznesowe          | Zrodlo danych                      | Element FA(3)               | Status
+------------------------|------------------------------------|-----------------------------|--------
+Wariant formularza      | staly "3"                          | Nagłówek/WariantFormularza  | ZMIANA  (mapper ma "2")
+Kod formularza          | staly "FA"                         | Nagłówek/KodFormularza      | OK
+Data wytworzenia FA     | datetime.utcnow() w chwili gen XML | Nagłówek/DataWytworzeniaFa  | ZMIANA  (mapper ma invoice.issue_date, potrzeba pełny datetime ISO 8601 z sekundami)
+Info o systemie         | staly "KSeF-Backend/0.1"           | Nagłówek/SystemInfo         | HARDKOD (wartosc akceptowalna, moze byc wersjonowana)
+
+---
+1.2 PODMIOT 1 - SPRZEDAWCA (Podmiot1/Sprzedawca)
+---
+
+Pole biznesowe          | Zrodlo danych                      | Element FA(3)                               | Status
+------------------------|------------------------------------|---------------------------------------------|--------
+NIP sprzedawcy          | seller_snapshot["nip"]             | Podmiot1/Sprzedawca/NIP                     | OK
+Nazwa sprzedawcy        | seller_snapshot["name"]            | Podmiot1/Sprzedawca/Nazwa                   | OK
+Adres - linia 1         | seller_snapshot["street"] + ["building_no"] | Podmiot1/Sprzedawca/Adres/AdresL1  | OK
+Adres - linia 2 (lokal) | seller_snapshot["apartment_no"]    | Podmiot1/Sprzedawca/Adres/AdresL2           | OK
+Kod pocztowy            | seller_snapshot["postal_code"]     | Podmiot1/Sprzedawca/Adres/KodPocztowy       | OK
+Miejscowosc             | seller_snapshot["city"]            | Podmiot1/Sprzedawca/Adres/Miejscowosc       | OK
+Kraj                    | seller_snapshot["country"] / "PL"  | Podmiot1/Sprzedawca/Adres/KodKraju          | OK
+
+Uwaga: seller_snapshot pochodzi z app/services/invoice_service.py z danych sprzedawcy (ContractorORM lub ustawien).
+Klucze slownika: nip, name, street, building_no, apartment_no, postal_code, city, country.
+
+---
+1.3 PODMIOT 2 - NABYWCA (Podmiot2/Nabywca)
+---
+
+Pole biznesowe          | Zrodlo danych                      | Element FA(3)                               | Status
+------------------------|------------------------------------|---------------------------------------------|--------
+NIP nabywcy             | buyer_snapshot["nip"]              | Podmiot2/Nabywca/NIP                        | OK
+Nazwa nabywcy           | buyer_snapshot["name"]             | Podmiot2/Nabywca/Nazwa                      | OK
+Adres - linia 1         | buyer_snapshot["street"] + ["building_no"] | Podmiot2/Nabywca/Adres/AdresL1     | OK
+Adres - linia 2 (lokal) | buyer_snapshot["apartment_no"]     | Podmiot2/Nabywca/Adres/AdresL2              | OK
+Kod pocztowy            | buyer_snapshot["postal_code"]      | Podmiot2/Nabywca/Adres/KodPocztowy          | OK
+Miejscowosc             | buyer_snapshot["city"]             | Podmiot2/Nabywca/Adres/Miejscowosc          | OK
+Kraj                    | buyer_snapshot["country"] / "PL"   | Podmiot2/Nabywca/Adres/KodKraju             | OK
+
+Uwaga: buyer_snapshot pochodzi z ContractorORM (buyer_id -> baza kontrahentow).
+Klucze slownika: identyczne z seller_snapshot.
+
+---
+1.4 NAGLOWKA FAKTURY (Fa)
+---
+
+Pole biznesowe          | Zrodlo danych                      | Element FA(3)               | Status
+------------------------|------------------------------------|-----------------------------|--------
+Waluta                  | Invoice.currency (default: "PLN")  | Fa/KodWaluty                | OK
+Data wystawienia        | Invoice.issue_date (date)          | Fa/P_1                      | OK
+Data sprzedazy          | Invoice.sale_date (date)           | Fa/P_1M                     | OK
+Numer faktury lokalny   | Invoice.number_local               | Fa/P_2                      | OK
+Rodzaj faktury          | staly "VAT"                        | Fa/RodzajFaktury            | HARDKOD (akceptowalny dla MVP, inne typy odlozone)
+Suma netto (stawka 23%) | Invoice.total_net                  | Fa/P_13_1                   | ZMIANA  (mapper zaklada wszystko na P_13_1; potrzeba grupowania wg stawki - patrz 2.3)
+Suma VAT (stawka 23%)   | Invoice.total_vat                  | Fa/P_14_1                   | ZMIANA  (jak P_13_1)
+Suma brutto             | Invoice.total_gross                | Fa/P_15                     | OK
+
+Brakujace wymagane przez FA(3):
+Data dostawy / wykonania | Invoice.delivery_date (brak!)     | Fa/P_6                      | BRAK    (w FA(3) wymagane dla RodzajFaktury=VAT gdy dostawa inna niz data wystawienia; jesli P_1==P_1M==P_6 mozna je pominac lub wymagac od API)
+
+---
+1.5 POZYCJE FAKTURY (Fa/FaWiersz)
+---
+
+Pole biznesowe          | Zrodlo danych                      | Element FA(3)               | Status
+------------------------|------------------------------------|-----------------------------|--------
+Nr pozycji              | InvoiceItem.sort_order             | FaWiersz/NrWierszaFa        | OK
+Nazwa towaru/uslugi     | InvoiceItem.name                   | FaWiersz/P_7                | OK
+Jednostka miary         | InvoiceItem.unit                   | FaWiersz/P_8A               | OK
+Ilosc                   | InvoiceItem.quantity               | FaWiersz/P_8B               | OK
+Cena jednostkowa netto  | InvoiceItem.unit_price_net         | FaWiersz/P_9A               | OK
+Wartosc netto pozycji   | InvoiceItem.net_total              | FaWiersz/P_11               | OK
+Stawka VAT              | InvoiceItem.vat_rate               | FaWiersz/P_12               | OK
+
+---
+1.6 ARTEFAKTY PO AKCEPTACJI PRZEZ KSEF (nie sa elementem XML wysylanego, ale domeny)
+---
+
+Pole biznesowe          | Miejsce docelowe                   | Zrodlo                      | Status
+------------------------|------------------------------------|---------------------------------------------|--------
+Numer KSeF              | Invoice.ksef_reference_number      | odpowiedz KSeF po sukcesie  | BRAK    (pole nie istnieje w domenie ani ORM)
+UPO (Urzedowe Poswiadczenie Odbioru) | Transmission lub Invoice | GET /upo z KSeF po sukcesie | BRAK    (brak pola upo_xml/upo_bytes w domenie i ORM)
+
+================================================================================
+SEKCJA 2 - POLA WYMAGAJACE DODANIA LUB ZMIANY W ETAPACH 1-4
+================================================================================
+
+2.1 ZMIANY W MAPPERZE (app/integrations/ksef/mapper.py)
+Zadanie: Commit 04
+-----------------------------------------------------------------------
+A) WariantFormularza: zmienić "2" na "3"
+B) DataWytworzeniaFa: mapper musi przyjmować datetime (lub generować datetime.utcnow()
+   w chwili wywołania), nie przepisywać issue_date (który jest tylko date)
+C) Grupowanie sum wg stawki VAT:
+   - mapper musi iterowac po items i zbierac sumy netto/VAT per stawka
+   - Mapowanie stawek na elementy FA(3):
+       23%  -> P_13_1 / P_14_1
+        8%  -> P_13_2 / P_14_2
+        5%  -> P_13_3 / P_14_3
+        0%  -> P_13_4 / P_14_4  (lub P_13_10 dla eksportu - odlozone)
+       zw   -> P_13_6 (wartość netto, brak P_14)
+       np.  -> P_13_7 (wartość netto, brak P_14)
+   - Dla MVP: wymagane min. 23%, pozostale stawki jako rozszerzenie
+D) P_6 (data dostawy/uslugi):
+   - Jeśli Invoice.delivery_date nie jest null -> emitować P_6
+   - Jeśli null i sale_date == issue_date -> mozna pominac P_6 (jest P_1M)
+   - Jeśli null i sale_date != issue_date -> uzyc sale_date jako P_6 (pragmatycznie)
+
+2.2 NOWE POLA W DOMENIE (app/domain/models/invoice.py)
+Zadanie: Commit 02
+-----------------------------------------------------------------------
+- delivery_date: date | None
+  Znaczenie: data dokonania dostawy towarów lub wykonania usługi (FA(3)/Fa/P_6)
+  Opcjonalne przy tworzeniu; jezeli null, mapper uzywa sale_date
+- ksef_reference_number: str | None
+  Znaczenie: numer KSeF nadany przez system po akceptacji faktury
+  Ustawiany przez poll_ksef_status handler po sukcesie
+
+2.3 NOWE POLA W ORM (app/persistence/models/invoice.py)
+Zadanie: Commit 02
+-----------------------------------------------------------------------
+- delivery_date: Date | None (kolumna, nullable)
+- ksef_reference_number: str | None (kolumna String(64), nullable, index=True)
+
+Uwaga: upo_xml/upo_bytes - przechowywanie UPO jest zadaniem Commitu 09,
+decyzja o miejscu (InvoiceORM vs TransmissionORM) zostaje do tego commitu.
+
+2.4 NOWE POLA W SCHEMATACH API (app/schemas/invoice.py)
+Zadanie: Commit 02
+-----------------------------------------------------------------------
+InvoiceCreateRequest:
+  + delivery_date: date | None = None
+
+InvoiceResponse:
+  + delivery_date: date | None
+  + ksef_reference_number: str | None
+
+================================================================================
+SEKCJA 3 - SWIADOME WYKLUCZENIA ZAKRESU PIERWSZEGO WDROZENIA (ETAP 0-4)
+================================================================================
+
+Obszar                              | Uzasadnienie wylaczenia
+------------------------------------|--------------------------------------------------
+Faktura korygujaca (FA KOR)         | Wymaga NrFaKorygowanej, PrzyczynaKorekty, logiki korekty in-place
+Faktura zaliczkowa (FA ZAL)         | Inny uklad sekcji Fa, pola P_8/P_9B/zaliczka
+Faktura rozliczajaca (FA ROZ)       | Powiazanie z FA ZAL, logika rozliczenia
+Samofakturowanie                    | Wymaga danych odbiorcy upowaznionego, osobna sekcja Podmiot
+VAT RR / VAT RR KOREKTA             | Osobny rodzaj dokumentu, inne pola i sekcje
+Sesja wsadowa KSeF                  | Inny endpoint, inny model wysylki i polling
+Tryby offline (offline24, awaria)   | Wymaga oddzielnego modelu przechowywania lokalnego i synchronizacji
+Zalaczniki do faktury               | Wymaga rejestracji zamiaru, osobne endpointy KSeF, ograniczenia formatow
+QR i dostep anonimowy               | Generowanie QR, mechanizm weryfikacji poza zalogowanym inboxem
+Dostep dwuetapowy (nabywca bez NIP) | Inny mechanizm sesji i tokenu przy odbiorze
+Inbox zakupowy (odbiór faktur)      | Osobny obieg, osobny polling KSeF dla faktur przychodzacych
+Identyfikator zbiorczy / MPP        | Wymaga powiazania numeru KSeF z platnoscia, osobny artefakt
+JPK z numerem KSeF                  | Osobny eksport, format JPK_V7M/JPK_FA
+ZAW-FA i zarzadzanie uprawnieniami  | Formularz administracyjny, osobne endpointy KSeF
+Cykl zycia tokenow                  | Lista, uniewaznianie, historia - etap 5
+Faktury unijne, WNT, WDT, eksport   | Oznaczenia specjalne, stawki 0% z roznymi procedurami
+Oznaczenia GTU (JPK)                | Dodatkowe tagi w pozycjach faktury, nie wymagane przez FA(3) bezposrednio
+Zgloszenie naduzycia i ukrywanie    | Osobne endpointy KSeF, brak w podstawowym workflow sprzedazy
+Certyfikaty i podpis kwalifikowany  | Alternatywna metoda auth, etap 5
+
+================================================================================
+SEKCJA 4 - MINIMALNY ZBIOR POL API DLA PIERWSZEGO SCENARIUSZA ONLINE
+================================================================================
+
+Minimalny request do POST /invoices dla FA(3) podstawowego:
+{
+  "issue_date": "2026-04-06",          -- wymagane
+  "sale_date": "2026-04-06",           -- wymagane
+  "delivery_date": null,               -- opcjonalne (nowe pole Commit 02)
+  "currency": "PLN",                   -- opcjonalne, default PLN
+  "buyer_id": "<UUID>",                -- wymagane (nabywca z bazy kontrahentow)
+  "items": [
+    {
+      "name": "Usluga projektowa",     -- wymagane
+      "quantity": "1.00",              -- wymagane
+      "unit": "szt.",                  -- wymagane
+      "unit_price_net": "1000.00",     -- wymagane
+      "vat_rate": "23"                 -- wymagane (procent, nie ulamek)
+    }
+  ]
+}
+
+Seller pobierany z danych zalogowanego uzytkownika / ustawien systemu (brak seller_id w request).
+NIP nabywcy pobierany z ContractorORM na podstawie buyer_id.
+
+================================================================================
+SEKCJA 5 - ZALEZNOSCI MIEDZY COMMITAMI
+================================================================================
+
+Commit 01  --> ten dokument (kontrakt)
+Commit 02  --> dodaje delivery_date i ksef_reference_number do domeny/ORM/schematow
+               (na podstawie Sekcji 2.2, 2.3, 2.4)
+Commit 03  --> testy domeny pokrywajace nowe pola (weryfikuje Sekcje 1.5 i 2.2)
+Commit 04  --> przepisuje mapper FA(2) -> FA(3) (realizuje Sekcje 2.1)
+Commit 05  --> testy mappera do FA(3) (weryfikuje Sekcje 1.1-1.5 i 2.1)
+Commit 06  --> walidacja XML i kontrakt adaptera
+Commit 07  --> workflow i statusy transmisji
+Commit 08  --> zapis ksef_reference_number (realizuje Sekcje 1.6)
+Commit 09  --> pobranie i zapis UPO (realizuje Sekcje 1.6 dla UPO)
+Commit 10  --> testy workflow end-to-end
+Commit 11  --> ekspozycja ksef_reference_number w API
+Commit 12  --> ekspozycja UPO w API/UI
+
+================================================================================

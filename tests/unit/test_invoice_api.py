@@ -287,3 +287,110 @@ class TestFrontendRoutes:
         res = client.get("/ui/sw.js")
         assert res.status_code == 200
         assert "javascript" in res.headers["content-type"]
+
+
+# ---------------------------------------------------------------------------
+# FA(3) new fields: delivery_date, ksef_reference_number
+# ---------------------------------------------------------------------------
+
+class TestFA3FieldsInAPI:
+    """Sprawdza, ze nowe pola FA(3) sa widoczne w odpowiedziach API."""
+
+    def test_get_invoice_response_contains_delivery_date_null(self, client, mock_invoice_service):
+        inv = _make_invoice()
+        assert inv.delivery_date is None
+        mock_invoice_service.get_invoice.return_value = inv
+
+        res = client.get(f"/api/v1/invoices/{inv.id}")
+
+        assert res.status_code == 200
+        body = res.json()
+        assert "delivery_date" in body
+        assert body["delivery_date"] is None
+
+    def test_get_invoice_response_contains_delivery_date_value(self, client, mock_invoice_service):
+        from datetime import date as _date
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            number_local=None,
+            status=InvoiceStatus.DRAFT,
+            issue_date=_date(2026, 4, 6),
+            sale_date=_date(2026, 4, 6),
+            delivery_date=_date(2026, 4, 4),
+            currency="PLN",
+            seller_snapshot={"nip": "1234567890", "name": "Sprzedawca"},
+            buyer_snapshot={"nip": "0987654321", "name": "Nabywca"},
+            items=[_make_item()],
+            total_net=Decimal("2000.00"),
+            total_vat=Decimal("460.00"),
+            total_gross=Decimal("2460.00"),
+            created_by=uuid4(),
+            created_at=now,
+            updated_at=now,
+        )
+        mock_invoice_service.get_invoice.return_value = inv
+
+        res = client.get(f"/api/v1/invoices/{inv.id}")
+
+        assert res.status_code == 200
+        assert res.json()["delivery_date"] == "2026-04-04"
+
+    def test_get_invoice_response_contains_ksef_reference_number_null(self, client, mock_invoice_service):
+        inv = _make_invoice()
+        mock_invoice_service.get_invoice.return_value = inv
+
+        res = client.get(f"/api/v1/invoices/{inv.id}")
+
+        assert res.status_code == 200
+        body = res.json()
+        assert "ksef_reference_number" in body
+        assert body["ksef_reference_number"] is None
+
+    def test_get_invoice_response_contains_ksef_reference_number_value(self, client, mock_invoice_service):
+        inv = _make_invoice()
+        inv.ksef_reference_number = "9999909999-20260406-ABC12345-01"
+        mock_invoice_service.get_invoice.return_value = inv
+
+        res = client.get(f"/api/v1/invoices/{inv.id}")
+
+        assert res.status_code == 200
+        assert res.json()["ksef_reference_number"] == "9999909999-20260406-ABC12345-01"
+
+    def test_create_invoice_with_delivery_date(self, client, mock_invoice_service, mock_idempotency_service):
+        from datetime import date as _date
+        inv = _make_invoice()
+        mock_invoice_service.create_invoice.return_value = inv
+
+        payload = {
+            "buyer_id": str(uuid4()),
+            "issue_date": "2026-04-06",
+            "sale_date": "2026-04-06",
+            "delivery_date": "2026-04-04",
+            "currency": "PLN",
+            "items": [{"name": "Usługa", "quantity": "1", "unit": "szt.", "unit_price_net": "100", "vat_rate": "23"}],
+        }
+
+        res = client.post("/api/v1/invoices/", json=payload)
+
+        assert res.status_code == 201
+        call_data = mock_invoice_service.create_invoice.call_args[0][0]
+        assert call_data["delivery_date"] == _date(2026, 4, 4)
+
+    def test_create_invoice_without_delivery_date(self, client, mock_invoice_service, mock_idempotency_service):
+        inv = _make_invoice()
+        mock_invoice_service.create_invoice.return_value = inv
+
+        payload = {
+            "buyer_id": str(uuid4()),
+            "issue_date": "2026-04-06",
+            "sale_date": "2026-04-06",
+            "currency": "PLN",
+            "items": [{"name": "Usługa", "quantity": "1", "unit": "szt.", "unit_price_net": "100", "vat_rate": "23"}],
+        }
+
+        res = client.post("/api/v1/invoices/", json=payload)
+
+        assert res.status_code == 201
+        call_data = mock_invoice_service.create_invoice.call_args[0][0]
+        assert call_data["delivery_date"] is None

@@ -34,6 +34,8 @@ class InvoiceMapper:
             status=InvoiceStatus(orm.status),
             issue_date=orm.issue_date,
             sale_date=orm.sale_date,
+            delivery_date=orm.delivery_date,
+            ksef_reference_number=orm.ksef_reference_number,
             currency=orm.currency,
             seller_snapshot=orm.seller_snapshot_json,
             buyer_snapshot=orm.buyer_snapshot_json,
@@ -57,6 +59,8 @@ class InvoiceMapper:
             totals_json=InvoiceMapper._totals_to_json(invoice),
             issue_date=invoice.issue_date,
             sale_date=invoice.sale_date,
+            delivery_date=invoice.delivery_date,
+            ksef_reference_number=invoice.ksef_reference_number,
             currency=invoice.currency,
             created_by=invoice.created_by,
         )
@@ -75,6 +79,8 @@ class InvoiceMapper:
         orm.totals_json = InvoiceMapper._totals_to_json(invoice)
         orm.issue_date = invoice.issue_date
         orm.sale_date = invoice.sale_date
+        orm.delivery_date = invoice.delivery_date
+        orm.ksef_reference_number = invoice.ksef_reference_number
         orm.currency = invoice.currency
 
         # Synchronizacja pozycji — zastąpienie kolekcji.
