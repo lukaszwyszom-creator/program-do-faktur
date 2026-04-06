@@ -15,6 +15,7 @@ class InvoiceORM(Base):
     number_local: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     seller_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     status: Mapped[str] = mapped_column(String(64), index=True)
+    payment_status: Mapped[str] = mapped_column(String(64), default="unpaid", nullable=False)
     seller_snapshot_json: Mapped[dict] = mapped_column(JSONB)
     buyer_snapshot_json: Mapped[dict] = mapped_column(JSONB)
     totals_json: Mapped[dict] = mapped_column(JSONB)
@@ -30,3 +31,4 @@ class InvoiceORM(Base):
     items = relationship("InvoiceItemORM", back_populates="invoice", cascade="all, delete-orphan")
     transmissions = relationship("TransmissionORM", back_populates="invoice", cascade="all, delete-orphan")
     created_by_user = relationship("UserORM", back_populates="created_invoices")
+    payment_allocations = relationship("PaymentAllocationORM", back_populates="invoice", cascade="all, delete-orphan")

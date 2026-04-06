@@ -9,11 +9,32 @@ class TransmissionResponse(BaseModel):
 
     id: UUID
     invoice_id: UUID
+    channel: str
+    operation_type: str
     status: str
     attempt_no: int
+    idempotency_key: str | None = None
+    external_reference: str | None = None
+    ksef_reference_number: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime
+
+
+class TransmissionListResponse(BaseModel):
+    items: list[TransmissionResponse]
+    invoice_id: UUID
 
 
 class RetryTransmissionResponse(BaseModel):
     transmission_id: UUID
+    attempt_no: int
+    status: str
+
+
+class SubmitInvoiceResponse(BaseModel):
+    transmission_id: UUID
+    invoice_id: UUID
     status: str

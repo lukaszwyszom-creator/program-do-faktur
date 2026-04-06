@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="/ui/manifest.webmanifest">
+  <meta name="theme-color" content="#0d6efd">
+  <title>Szczegóły faktury</title>
+  <link rel="stylesheet" href="/ui/static/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <button class="btn-icon" id="btn-back" title="Wstecz" style="font-size:20px;">←</button>
+  <h1 id="page-title">Faktura</h1>
+  <div class="header-actions">
+    <button class="btn-icon" id="btn-open-pdf" title="Podgląd / druk PDF" style="font-size:18px;">🖨</button>
+  </div>
+</header>
+
+<main class="main-content" id="main-content">
+  <div class="state-loading">Ładowanie</div>
+</main>
+
+<script type="module">
+  import {
+    requireAuth, api,
+    badgeHtml, escHtml, formatMoney,
+    setError, showToast,
+  } from "/ui/static/app.js";
+  requireAuth();
+
+  const params = new URLSearchParams(location.search);
+  const invoiceId = params.get("id");
+
+  if (!invoiceId) {
+    window.location.replace("/ui/");
+  }
+
+  const mainEl = document.getElementById("main-content");
+  const pageTitle = document.getElementById("page-title");
+
+  document.getElementById("btn-back").addEventListener("click", () => history.back());
+
+  document.getElementById("btn-open-pdf").addEventListener("click", () => {
+    window.open(api.pdfUrl(invoiceId), "_blank");
+  });
+
+  /* ---- Load invoice ---- */
+  async function loadInvoice() {
+    let invoice;
+    try {
+      invoice = await api.getInvoice(invoiceId);
+    } catch (err) {
+      setError(mainEl, err.message);
+      return;
+    }
+
+    if (!invoice) return;
+    pageTitle.textContent = invoice.number_local || "Szkic";
+
+    let transmissions = [];
+    try {
+      const tData = await api.listTransmissions(invoiceId);
+      transmissions = tData?.items ?? [];
+    } catch (_) {}
+
+    let paymentHistory = [];
+    try {
+      paymentHistory = await api.getInvoicePaymentHistory(invoiceId);
+    } catch (_) {}
+
+    renderInvoice(invoice, transmissions, paymentHistory);
+  }
+
+  function renderInvoice(inv, transmissions, paymentHistory = []) {
+    const seller = inv.seller_snapshot ?? {};
+    const buyer = inv.buyer_snapshot ?? {};
+
+    /* -- Items table rows -- */
+    const itemRows = inv.items.map((it) => `
+      <tr>
+        <td>${escHtml(it.name)}</td>
+        <td class="num">${escHtml(it.quantity)}</td>
+        <td>${escHtml(it.unit)}</td>
+        <td class="num">${escHtml(it.unit_price_net)}</td>
+        <td class="num">${escHtml(it.vat_rate)}%</td>
+        <td class="num">${escHtml(it.net_total)}</td>
+        <td class="num">${escHtml(it.vat_total)}</td>
+        <td class="num" style="font-weight:700">${escHtml(it.gross_total)}</td>
+      </tr>
+    `).join("");
+
+    /* -- Latest transmission -- */
+    const latestT = transmissions.length
+      ? transmissions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+      : null;
+
+    /* -- Action buttons -- */
+    let actions = "";
+
+    if (inv.status === "draft") {
+      actions += `<button class="btn btn-primary" id="btn-mark-ready">Zatwierdź do wysyłki</button>`;
+    }
+
+    if (inv.status === "ready_for_submission") {
+      actions += `<button class="btn btn-primary" id="btn-submit">Wyślij do KSeF</button>`;
+    }
+
+    if (latestT && latestT.status === "failed_retryable") {
+      actions += `<button class="btn btn-danger" id="btn-retry" data-tid="${escHtml(latestT.id)}">
+        Ponów wysyłkę (próba ${latestT.attempt_no})
+      </button>`;
+    }
+
+    /* -- Transmissions history -- */
+    const tRows = transmissions.length
+      ? transmissions.map((t) => `
+        <tr>
+          <td>${escHtml(t.created_at?.slice(0, 19).replace("T", " "))}</td>
+          <td>${badgeHtml(t.status)}</td>
+          <td>${escHtml(t.attempt_no)}</td>
+          <td style="font-size:11px;color:var(--color-muted);">${escHtml(t.ksef_reference_number ?? "—")}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="4" style="text-align:center;color:var(--color-muted)">Brak historii wysyłek</td></tr>`;
+
+    mainEl.innerHTML = `
+      <!-- Header info -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-number">${escHtml(inv.number_local || "— Szkic —")}</div>
+            <div class="card-date">
+              Wystawiona: ${escHtml(inv.issue_date)} &bull; Sprzedaż: ${escHtml(inv.sale_date)}
+              &bull; Waluta: ${escHtml(inv.currency)}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            ${badgeHtml(inv.status)}
+            ${badgeHtml(inv.payment_status ?? "unpaid")}
+          </div>
+        </div>
+
+        ${actions ? `<div class="action-row" id="action-row">${actions}</div>` : ""}
+      </div>
+
+      <!-- Parties -->
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="detail-section">
+            <h3>Sprzedawca</h3>
+            <div class="detail-row"><strong>${escHtml(seller.name ?? "")}</strong></div>
+            ${seller.nip ? `<div class="detail-row"><span class="detail-label">NIP:</span> ${escHtml(seller.nip)}</div>` : ""}
+            ${seller.address ? `<div class="detail-row"><span class="detail-label">Adres:</span> ${escHtml(seller.address)}</div>` : ""}
+          </div>
+          <div class="detail-section">
+            <h3>Nabywca</h3>
+            <div class="detail-row"><strong>${escHtml(buyer.name ?? "")}</strong></div>
+            ${buyer.nip ? `<div class="detail-row"><span class="detail-label">NIP:</span> ${escHtml(buyer.nip)}</div>` : ""}
+            ${buyer.address ? `<div class="detail-row"><span class="detail-label">Adres:</span> ${escHtml(buyer.address)}</div>` : ""}
+          </div>
+        </div>
+      </div>
+
+      <!-- Items table -->
+      <div class="card">
+        <div class="detail-section" style="margin-bottom:0">
+          <h3>Pozycje faktury</h3>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Nazwa</th>
+                <th class="num">Ilość</th>
+                <th>J.m.</th>
+                <th class="num">C. netto</th>
+                <th class="num">VAT</th>
+                <th class="num">Netto</th>
+                <th class="num">VAT</th>
+                <th class="num">Brutto</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+        </div>
+        <div class="totals-row">
+          <span>Razem netto: <strong>${escHtml(inv.total_net)} ${escHtml(inv.currency)}</strong></span>
+          <span>Razem VAT: <strong>${escHtml(inv.total_vat)} ${escHtml(inv.currency)}</strong></span>
+          <span class="total-gross">Do zapłaty: ${formatMoney(inv.total_gross, inv.currency)}</span>
+        </div>
+      </div>
+
+      <!-- Transmissions history -->
+      <div class="card">
+        <div class="detail-section" style="margin-bottom:8px">
+          <h3>Historia wysyłek KSeF</h3>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Czas</th>
+                <th>Status</th>
+                <th>Próba</th>
+                <th>Numer KSeF</th>
+              </tr>
+            </thead>
+            <tbody>${tRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Payment history -->
+      <div class="card payment-section" id="payment-card">
+        <div class="card-header" style="margin-bottom:8px">
+          <div class="detail-section" style="margin-bottom:0"><h3>Płatności</h3></div>
+          <button class="btn btn-outline" id="btn-add-payment" style="font-size:13px;padding:6px 12px">+ Dodaj przelew</button>
+        </div>
+        <div id="payment-list">${_renderPaymentList(paymentHistory, inv.total_gross, inv.currency)}</div>
+      </div>
+    `;
+
+    bindActions(inv, latestT);
+    _bindPaymentActions();
+  }
+
+  function bindActions(inv, latestT) {
+    const markReadyBtn = document.getElementById("btn-mark-ready");
+    if (markReadyBtn) {
+      markReadyBtn.addEventListener("click", async () => {
+        markReadyBtn.disabled = true;
+        try {
+          await api.markReady(inv.id);
+          showToast("Faktura zatwierdzona do wysyłki.", "success");
+          await loadInvoice();
+        } catch (err) {
+          showToast("Błąd: " + err.message, "error");
+          markReadyBtn.disabled = false;
+        }
+      });
+    }
+
+    const submitBtn = document.getElementById("btn-submit");
+    if (submitBtn) {
+      submitBtn.addEventListener("click", async () => {
+        submitBtn.disabled = true;
+        try {
+          await api.submitInvoice(inv.id);
+          showToast("Faktura przesłana do KSeF.", "success");
+          await loadInvoice();
+        } catch (err) {
+          showToast("Błąd: " + err.message, "error");
+          submitBtn.disabled = false;
+        }
+      });
+    }
+
+    const retryBtn = document.getElementById("btn-retry");
+    if (retryBtn && latestT) {
+      retryBtn.addEventListener("click", async () => {
+        retryBtn.disabled = true;
+        try {
+          await api.retryTransmission(latestT.id);
+          showToast("Ponowna wysyłka zlecona.", "success");
+          await loadInvoice();
+        } catch (err) {
+          showToast("Błąd: " + err.message, "error");
+          retryBtn.disabled = false;
+        }
+      });
+    }
+  }
+
+  function _renderPaymentList(allocations, totalGross, currency) {
+    if (!allocations || allocations.length === 0) {
+      return `<div style="font-size:13px;color:var(--color-muted);text-align:center;padding:12px 0">Brak przypisanych płatności</div>`;
+    }
+    return allocations.map((a) => {
+      const rev = a.is_reversed;
+      const meta = [
+        a.transaction_date ?? "",
+        a.counterparty_name ?? "",
+        a.match_method === "auto" ? "auto-dopasowanie" : "ręczne",
+      ].filter(Boolean).join(" · ");
+      return `
+        <div class="payment-allocation-row${rev ? " payment-alloc-reversed" : ""}">
+          <div class="payment-alloc-info">
+            <div class="title">${escHtml(meta)}</div>
+            <div class="meta">${a.match_score != null ? `wynik: ${a.match_score}` : (a.match_method === "manual" ? "ręczne" : "")}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="payment-alloc-amount">${formatMoney(a.allocated_amount, currency)}</span>
+            ${!rev ? `<button class="btn btn-danger" style="padding:4px 8px;font-size:12px" data-reverse="${escHtml(a.id)}">Cofnij</button>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function _bindPaymentActions() {
+    const addBtn = document.getElementById("btn-add-payment");
+    addBtn?.addEventListener("click", () => {
+      const txId = prompt("ID transakcji bankowej (UUID):");
+      if (!txId) return;
+      const amountStr = prompt("Kwota alokacji (PLN):");
+      if (!amountStr) return;
+      const amount = parseFloat(amountStr.replace(",", "."));
+      if (isNaN(amount) || amount <= 0) { showToast("Nieprawidłowa kwota.", "error"); return; }
+      api.allocateManual(txId.trim(), invoiceId, amount)
+        .then(() => { showToast("Płatność przypisana.", "success"); loadInvoice(); })
+        .catch((err) => showToast("Błąd: " + err.message, "error"));
+    });
+
+    document.querySelectorAll("[data-reverse]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const allocId = btn.dataset.reverse;
+        btn.disabled = true;
+        try {
+          await api.reverseAllocation(allocId);
+          showToast("Alokacja cofnięta.", "success");
+          await loadInvoice();
+        } catch (err) {
+          showToast("Błąd: " + err.message, "error");
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  loadInvoice();
+</script>
+</body>
+</html>

@@ -9,14 +9,15 @@ from app.core.config import settings
 
 
 def create_db_engine() -> Engine:
-	return create_engine(
-		settings.database_url,
-		echo=settings.database_echo,
-		future=True,
-		pool_pre_ping=True,
-		pool_size=settings.database_pool_size,
-		max_overflow=settings.database_max_overflow,
-	)
+	kwargs: dict = {
+		"echo": settings.database_echo,
+		"future": True,
+		"pool_pre_ping": True,
+	}
+	if not settings.database_url.startswith("sqlite"):
+		kwargs["pool_size"] = settings.database_pool_size
+		kwargs["max_overflow"] = settings.database_max_overflow
+	return create_engine(settings.database_url, **kwargs)
 
 
 engine = create_db_engine()

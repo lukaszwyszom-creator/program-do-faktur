@@ -63,6 +63,6 @@ class AuthService:
             is_active=True,
         )
         self.user_repository.add(user)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(user)
         return user

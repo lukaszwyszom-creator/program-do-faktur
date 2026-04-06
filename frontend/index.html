@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="/ui/manifest.webmanifest">
+  <meta name="theme-color" content="#0d6efd">
+  <title>Faktury</title>
+  <link rel="stylesheet" href="/ui/static/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>📄 Faktury</h1>
+  <div class="header-actions">
+    <button class="btn-icon" id="btn-logout" title="Wyloguj się">⎋</button>
+  </div>
+</header>
+
+<main class="main-content">
+  <!-- Filters -->
+  <form class="filter-bar" id="filter-form" autocomplete="off">
+    <div class="filter-group">
+      <label for="f-status">Status</label>
+      <select id="f-status">
+        <option value="">Wszystkie</option>
+        <option value="draft">Szkic</option>
+        <option value="ready_for_submission">Gotowa do wysyłki</option>
+        <option value="sending">Wysyłanie</option>
+        <option value="accepted">Zatwierdzona</option>
+        <option value="rejected">Odrzucona</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="f-date-from">Data od</label>
+      <input type="date" id="f-date-from">
+    </div>
+    <div class="filter-group">
+      <label for="f-date-to">Data do</label>
+      <input type="date" id="f-date-to">
+    </div>
+    <div class="filter-group">
+      <label for="f-number">Numer</label>
+      <input type="text" id="f-number" placeholder="Szukaj po numerze…">
+    </div>
+    <div class="filter-group" style="justify-content: flex-end; flex: 0 0 auto;">
+      <button type="submit" class="btn btn-primary" style="height: 38px;">Szukaj</button>
+    </div>
+  </form>
+
+  <!-- Invoice list -->
+  <div id="invoice-list">
+    <div class="state-loading">Ładowanie</div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination" style="display:none;">
+    <span id="pagination-info"></span>
+    <div class="pagination-btns">
+      <button class="btn btn-outline" id="btn-prev" disabled>‹ Poprzednia</button>
+      <button class="btn btn-outline" id="btn-next" disabled>Następna ›</button>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, clearToken, api, badgeHtml, formatMoney, escHtml, setError, showToast } from "/ui/static/app.js";
+
+  requireAuth();
+
+  const PAGE_SIZE = 20;
+  let currentPage = 1;
+  let totalItems = 0;
+
+  /* ---- Elements ---- */
+  const listEl = document.getElementById("invoice-list");
+  const paginationEl = document.getElementById("pagination");
+  const paginationInfo = document.getElementById("pagination-info");
+  const btnPrev = document.getElementById("btn-prev");
+  const btnNext = document.getElementById("btn-next");
+
+  /* ---- Logout ---- */
+  document.getElementById("btn-logout").addEventListener("click", () => {
+    clearToken();
+    window.location.href = "/ui/login";
+  });
+
+  /* ---- Filters ---- */
+  document.getElementById("filter-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    currentPage = 1;
+    loadInvoices();
+  });
+
+  /* ---- Pagination ---- */
+  btnPrev.addEventListener("click", () => { currentPage--; loadInvoices(); });
+  btnNext.addEventListener("click", () => { currentPage++; loadInvoices(); });
+
+  /* ---- Load ---- */
+  async function loadInvoices() {
+    listEl.innerHTML = `<div class="state-loading">Ładowanie</div>`;
+    paginationEl.style.display = "none";
+
+    const params = {
+      status: document.getElementById("f-status").value,
+      issue_date_from: document.getElementById("f-date-from").value,
+      issue_date_to: document.getElementById("f-date-to").value,
+      number_filter: document.getElementById("f-number").value,
+      page: currentPage,
+      size: PAGE_SIZE,
+    };
+
+    try {
+      const data = await api.listInvoices(params);
+      if (!data) return;
+      totalItems = data.total;
+      renderList(data.items);
+      renderPagination();
+    } catch (err) {
+      setError(listEl, err.message);
+    }
+  }
+
+  function renderList(invoices) {
+    if (!invoices.length) {
+      listEl.innerHTML = `<div class="state-empty">Brak faktur spełniających kryteria.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = invoices
+      .map(
+        (inv) => `
+        <div class="card card-clickable" data-id="${escHtml(inv.id)}" role="button" tabindex="0"
+             aria-label="Faktura ${escHtml(inv.number_local || "szkic")}">
+          <div class="card-header">
+            <div>
+              <div class="card-number">${escHtml(inv.number_local || "— Szkic —")}</div>
+              <div class="card-date">Wystawiona: ${escHtml(inv.issue_date)}</div>
+            </div>
+            ${badgeHtml(inv.status)}
+          </div>
+          <div class="card-body">
+            ${escHtml(inv.buyer_snapshot?.name ?? "")}
+            ${inv.buyer_snapshot?.nip ? `&bull; NIP ${escHtml(inv.buyer_snapshot.nip)}` : ""}
+          </div>
+          <div class="card-footer">
+            <span class="card-amount">${formatMoney(inv.total_gross, inv.currency)}</span>
+            <span style="font-size:12px;color:var(--color-muted);">
+              Sprzedaż: ${escHtml(inv.sale_date)}
+            </span>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+
+    /* navigate on click / keyboard */
+    listEl.querySelectorAll(".card-clickable").forEach((card) => {
+      const go = () => {
+        window.location.href = `/ui/invoice?id=${card.dataset.id}`;
+      };
+      card.addEventListener("click", go);
+      card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); });
+    });
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+    if (totalPages <= 1) { paginationEl.style.display = "none"; return; }
+
+    paginationEl.style.display = "flex";
+    paginationInfo.textContent = `Strona ${currentPage} z ${totalPages} (${totalItems} faktur)`;
+    btnPrev.disabled = currentPage <= 1;
+    btnNext.disabled = currentPage >= totalPages;
+  }
+
+  /* ---- Initial load ---- */
+  loadInvoices();
+</script>
+</body>
+</html>

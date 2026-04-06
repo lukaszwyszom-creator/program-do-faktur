@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.exceptions import ExternalServiceError, NotFoundError
 from app.core.security import AuthenticatedUser
+from app.core.utils import to_uuid
 from app.persistence.models.contractor import ContractorORM
 from app.persistence.models.contractor_override import ContractorOverrideORM
 from app.persistence.repositories.contractor_override_repository import ContractorOverrideRepository
@@ -90,7 +91,7 @@ class ContractorService:
         before = self._override_snapshot(active_override)
 
         if active_override is None:
-            active_override = ContractorOverrideORM(contractor_id=contractor_id, created_by=actor.user_id)
+            active_override = ContractorOverrideORM(contractor_id=contractor_id, created_by=to_uuid(actor.user_id))
             for field_name, value in override_data.items():
                 setattr(active_override, field_name, value)
             self.contractor_override_repository.add(active_override)
