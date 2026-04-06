@@ -1,4 +1,4 @@
-"""Testy KSeFMapper — mapowanie faktury do XML FA(2)."""
+"""Testy KSeFMapper — mapowanie faktury do XML FA(3)."""
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -10,7 +10,7 @@ from lxml import etree
 
 from app.domain.enums import InvoiceStatus
 from app.domain.models.invoice import Invoice, InvoiceItem
-from app.integrations.ksef.mapper import KSeFMapper, _NS_FA
+from app.integrations.ksef.mapper import KSeFMapper, _NS_FA, _rate_key
 
 
 # ---------------------------------------------------------------------------
@@ -137,12 +137,16 @@ class TestInvoiceToXml:
     def test_naglowek_wariant_formularza(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
         root = _parse_xml(xml)
-        assert _text(root, "Naglowek", "WariantFormularza") == "2"
+        assert _text(root, "Naglowek", "WariantFormularza") == "3"
 
     def test_naglowek_data_wytworzenia(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice(issue_date=date(2026, 4, 5)))
         root = _parse_xml(xml)
-        assert _text(root, "Naglowek", "DataWytworzeniaFa") == "2026-04-05"
+        # FA(3): DataWytworzeniaFa to pełny datetime ISO 8601 UTC, nie sama data
+        val = _text(root, "Naglowek", "DataWytworzeniaFa")
+        assert val is not None
+        assert "T" in val, f"Oczekiwano datetime ISO, otrzymano: {val}"
+        assert val.endswith("Z"), f"Oczekiwano UTC Z, otrzymano: {val}"
 
     def test_fa_currency(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice(currency="EUR"))
@@ -171,12 +175,20 @@ class TestInvoiceToXml:
         assert _text(root, "Fa", "P_1M") == "2026-03-10"
 
     def test_fa_total_net(self):
-        xml = KSeFMapper.invoice_to_xml(_make_invoice(total_net="500.00"))
+        # FA(3): P_13_x pochodzi z sum pozycji, nie z pola total_net faktury
+        item = _make_item(net_total="500.00", vat_total="115.00", gross_total="615.00")
+        xml = KSeFMapper.invoice_to_xml(
+            _make_invoice(items=[item], total_net="500.00", total_vat="115.00", total_gross="615.00")
+        )
         root = _parse_xml(xml)
         assert _text(root, "Fa", "P_13_1") == "500.00"
 
     def test_fa_total_vat(self):
-        xml = KSeFMapper.invoice_to_xml(_make_invoice(total_vat="115.00"))
+        # FA(3): P_14_x pochodzi z sum pozycji, nie z pola total_vat faktury
+        item = _make_item(net_total="500.00", vat_total="115.00", gross_total="615.00")
+        xml = KSeFMapper.invoice_to_xml(
+            _make_invoice(items=[item], total_net="500.00", total_vat="115.00", total_gross="615.00")
+        )
         root = _parse_xml(xml)
         assert _text(root, "Fa", "P_14_1") == "115.00"
 
@@ -332,6 +344,158 @@ class TestValidateXml:
 
     def test_empty_bytes_returns_false(self):
         assert KSeFMapper.validate_xml(b"") is False
+
+
+class TestFA3VatTotals:
+    """Testy grupowania sum VAT per stawka."""
+
+    def _make_item_with_rate(self, vat_rate: str, net: str, vat: str,
+                              gross: str, sort_order: int = 1) -> InvoiceItem:
+        return _make_item(
+            vat_rate=vat_rate,
+            net_total=net,
+            vat_total=vat,
+            gross_total=gross,
+            sort_order=sort_order,
+        )
+
+    def test_single_rate_23_emits_p13_1_p14_1(self):
+        item = self._make_item_with_rate("23", "100.00", "23.00", "123.00")
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(items=[item], total_net="100.00", total_vat="23.00"))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_1") == "100.00"
+        assert _text(root, "Fa", "P_14_1") == "23.00"
+        assert _find(root, "Fa", "P_13_2") is None
+
+    def test_single_rate_8_emits_p13_2_p14_2(self):
+        item = self._make_item_with_rate("8", "100.00", "8.00", "108.00")
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(items=[item], total_net="100.00", total_vat="8.00", total_gross="108.00"))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_2") == "100.00"
+        assert _text(root, "Fa", "P_14_2") == "8.00"
+        assert _find(root, "Fa", "P_13_1") is None
+
+    def test_single_rate_5_emits_p13_3_p14_3(self):
+        item = self._make_item_with_rate("5", "200.00", "10.00", "210.00")
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(items=[item], total_net="200.00", total_vat="10.00", total_gross="210.00"))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_3") == "200.00"
+        assert _text(root, "Fa", "P_14_3") == "10.00"
+
+    def test_single_rate_0_emits_p13_4_p14_4(self):
+        item = self._make_item_with_rate("0", "500.00", "0.00", "500.00")
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(items=[item], total_net="500.00", total_vat="0.00", total_gross="500.00"))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_4") == "500.00"
+        assert _text(root, "Fa", "P_14_4") == "0.00"
+
+    def test_two_rates_emits_both_groups(self):
+        item23 = self._make_item_with_rate("23", "100.00", "23.00", "123.00", sort_order=1)
+        item8 = self._make_item_with_rate("8", "200.00", "16.00", "216.00", sort_order=2)
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(
+            items=[item23, item8],
+            total_net="300.00", total_vat="39.00", total_gross="339.00",
+        ))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_1") == "100.00"
+        assert _text(root, "Fa", "P_14_1") == "23.00"
+        assert _text(root, "Fa", "P_13_2") == "200.00"
+        assert _text(root, "Fa", "P_14_2") == "16.00"
+
+    def test_multiple_items_same_rate_sums_correctly(self):
+        i1 = self._make_item_with_rate("23", "100.00", "23.00", "123.00", sort_order=1)
+        i2 = self._make_item_with_rate("23", "200.00", "46.00", "246.00", sort_order=2)
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(
+            items=[i1, i2], total_net="300.00", total_vat="69.00", total_gross="369.00",
+        ))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_13_1") == "300.00"
+        assert _text(root, "Fa", "P_14_1") == "69.00"
+
+
+class TestFA3P6DeliveryDate:
+    """Testy pola P_6 (data dostawy) w FA(3)."""
+
+    def test_p6_emitted_when_sale_date_differs_from_issue_date(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(
+            issue_date=date(2026, 4, 10),
+            sale_date=date(2026, 4, 8),
+        ))
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_6") == "2026-04-08"
+
+    def test_p6_not_emitted_when_sale_date_equals_issue_date(self):
+        xml = KSeFMapper.invoice_to_xml(_make_invoice(
+            issue_date=date(2026, 4, 10),
+            sale_date=date(2026, 4, 10),
+        ))
+        root = _parse_xml(xml)
+        assert _find(root, "Fa", "P_6") is None
+
+    def test_p6_uses_delivery_date_when_set(self):
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.READY_FOR_SUBMISSION,
+            issue_date=date(2026, 4, 10),
+            sale_date=date(2026, 4, 9),
+            delivery_date=date(2026, 4, 7),
+            currency="PLN",
+            number_local="FV/1/04/2026",
+            seller_snapshot={"nip": "1234567890", "name": "S"},
+            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            items=[_make_item()],
+            total_net=Decimal("100.00"),
+            total_vat=Decimal("23.00"),
+            total_gross=Decimal("123.00"),
+            created_at=now,
+            updated_at=now,
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _text(root, "Fa", "P_6") == "2026-04-07"
+
+    def test_p6_not_emitted_when_delivery_date_equals_issue_date(self):
+        now = datetime.now(UTC)
+        inv = Invoice(
+            id=uuid4(),
+            status=InvoiceStatus.READY_FOR_SUBMISSION,
+            issue_date=date(2026, 4, 10),
+            sale_date=date(2026, 4, 8),
+            delivery_date=date(2026, 4, 10),  # równa issue_date
+            currency="PLN",
+            number_local=None,
+            seller_snapshot={"nip": "1234567890", "name": "S"},
+            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            items=[_make_item()],
+            total_net=Decimal("100.00"),
+            total_vat=Decimal("23.00"),
+            total_gross=Decimal("123.00"),
+            created_at=now,
+            updated_at=now,
+        )
+        xml = KSeFMapper.invoice_to_xml(inv)
+        root = _parse_xml(xml)
+        assert _find(root, "Fa", "P_6") is None
+
+
+class TestRateKey:
+    """Testy helpera _rate_key."""
+
+    def test_23_percent(self):
+        assert _rate_key(Decimal("23")) == "23"
+
+    def test_23_decimal(self):
+        assert _rate_key(Decimal("23.00")) == "23"
+
+    def test_8_percent(self):
+        assert _rate_key(Decimal("8")) == "8"
+
+    def test_5_percent(self):
+        assert _rate_key(Decimal("5")) == "5"
+
+    def test_0_percent(self):
+        assert _rate_key(Decimal("0")) == "0"
 
 
 class TestExceptions:

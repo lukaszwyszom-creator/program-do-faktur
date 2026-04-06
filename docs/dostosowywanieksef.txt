@@ -700,7 +700,7 @@ Zrobione
 - 75/75 testow przechodzi
 
 COMMIT 04 - Przepisanie mappera KSeF z FA(2) na FA(3)
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Zmienic generowany dokument na FA(3).
 - Usunac zalozenia FA(2) z implementacji.
@@ -714,7 +714,13 @@ Definition of done
 - Podstawowa faktura online generuje FA(3).
 
 Zrobione
--
+- WariantFormularza: "2" -> "3"
+- DataWytworzeniaFa: datetime ISO 8601 UTC (datetime.now(timezone.utc))
+- P_6: emitowane gdy sale_date != issue_date lub delivery_date podany
+- Sumy P_13_x/P_14_x grupowane per stawka VAT z pozycji
+- Refaktor: _build_party() i _build_vat_totals() jako prywatne helpery
+- _rate_key() mapuje Decimal stawki na klucz slownika _VAT_RATE_FIELDS
+- Obslugiwane stawki: 23%, 8%, 5%, 0%, zw (P_13_6), np (P_13_7)
 
 ROZBICIE COMMIT 04 - TASKI TECHNICZNE DO ODHACZANIA
 
@@ -902,18 +908,18 @@ Zrobione
 -
 
 CHECKLISTA ZBIORCZA DLA COMMIT 04
-- [ ] 04.1 wykonane
-- [ ] 04.2 wykonane
-- [ ] 04.3 wykonane
-- [ ] 04.4 wykonane
-- [ ] 04.5 wykonane
-- [ ] 04.6 wykonane
-- [ ] 04.7 wykonane
-- [ ] 04.8 wykonane
-- [ ] 04.9 wykonane
+- [x] 04.1 wykonane
+- [x] 04.2 wykonane
+- [x] 04.3 wykonane
+- [x] 04.4 wykonane
+- [x] 04.5 wykonane
+- [x] 04.6 wykonane
+- [x] 04.7 wykonane
+- [x] 04.8 wykonane
+- [x] 04.9 wykonane
 
 COMMIT 05 - Aktualizacja testow mappera do FA(3)
-Status: [ ]
+Status: [x] ZREALIZOWANY 2026-04-06
 Zakres
 - Usunac testy zakladajace FA(2).
 - Dodac testy naglowka, stron transakcji, sum i pozycji dla FA(3).
@@ -925,7 +931,13 @@ Definition of done
 - Testy pilnuja FA(3), nie dawnej wersji dokumentu.
 
 Zrobione
--
+- test_naglowek_wariant_formularza: sprawdza "3" zamiast "2"
+- test_naglowek_data_wytworzenia: sprawdza datetime ISO z "T" i "Z"
+- test_fa_total_net / test_fa_total_vat: uzywaja pozycji z odpowiednimi netTot/vatTot
+- Klasa TestFA3VatTotals: 6 testow (23%/8%/5%/0%/dwie stawki/wiele pozycji)
+- Klasa TestFA3P6DeliveryDate: 4 testy (P_6 emitowane/nie emitowane/delivery_date)
+- Klasa TestRateKey: 5 testow helpera _rate_key
+- 52/52 testow mappera przechodzi, 298/298 calego suite
 
 COMMIT 06 - Walidacja XML i kontrakt adaptera KSeF
 Status: [ ]
