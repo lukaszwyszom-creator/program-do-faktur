@@ -10,6 +10,7 @@ from app.persistence.models.invoice_advance_link import InvoiceAdvanceLinkORM
 from app.persistence.models.invoice_item import InvoiceItemORM
 from app.persistence.models.ksef_session import KSeFSessionORM
 from app.persistence.models.payment_allocation import PaymentAllocationORM
+from app.persistence.models.stock import ProductORM, StockMovementORM, StockORM, WarehouseORM
 from app.persistence.models.transmission import TransmissionORM
 from app.persistence.models.user import UserORM
 
@@ -26,6 +27,10 @@ __all__ = [
     "InvoiceORM",
     "KSeFSessionORM",
     "PaymentAllocationORM",
+    "ProductORM",
+    "StockMovementORM",
+    "StockORM",
     "TransmissionORM",
     "UserORM",
+    "WarehouseORM",
 ]

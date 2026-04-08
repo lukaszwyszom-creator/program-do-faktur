@@ -23,6 +23,7 @@ from app.persistence.repositories.contractor_repository import ContractorReposit
 from app.persistence.repositories.invoice_repository import InvoiceRepository
 from app.services.audit_service import AuditService
 from app.services.invoice_number_policy import InvoiceNumberPolicy
+from app.services.stock_service import StockService
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,14 @@ class InvoiceService:
         contractor_repository: ContractorRepository,
         contractor_override_repository: ContractorOverrideRepository,
         audit_service: AuditService,
+        stock_service: StockService | None = None,
     ) -> None:
         self.session = session
         self.invoice_repository = invoice_repository
         self.contractor_repository = contractor_repository
         self.contractor_override_repository = contractor_override_repository
         self.audit_service = audit_service
+        self.stock_service = stock_service
 
     # -------------------------------------------------------------------------
     # PUBLIC API
@@ -111,6 +114,17 @@ class InvoiceService:
                 "total_gross": str(saved.total_gross),
             },
         )
+
+        if self.stock_service is not None:
+            self.stock_service.handle_invoice_created(
+                invoice_id=saved.id,
+                direction=saved.direction,
+                items=[
+                    {"product_id": item.product_id, "quantity": item.quantity}
+                    for item in saved.items
+                    if hasattr(item, "product_id")
+                ],
+            )
 
         return saved
 

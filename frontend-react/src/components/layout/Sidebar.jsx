@@ -8,9 +8,9 @@ const NAV_ITEMS_SIMPLE   = [
   { to: '/simple',   label: 'Faktury',   icon: '📄' },
 ];
 const NAV_ITEMS_ADVANCED = [
-  { to: '/simple',   label: 'Faktury',   icon: '📄' },
   { to: '/advanced', label: 'Dashboard', icon: '📊' },
   { to: '/payments', label: 'Płatności', icon: '💳' },
+  { to: '/stock',    label: 'Magazyn',   icon: '📦' },
 ];
 
 export default function Sidebar() {

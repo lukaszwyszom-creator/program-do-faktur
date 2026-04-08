@@ -4,7 +4,6 @@ import Table from '../common/Table';
 import StatusBadge from '../common/StatusBadge';
 import Pagination from '../common/Pagination';
 import InvoiceActions from './InvoiceActions';
-import styles from './InvoiceList.module.css';
 
 const COLUMNS = [
   { key: 'number_local', label: 'Numer', width: 160 },

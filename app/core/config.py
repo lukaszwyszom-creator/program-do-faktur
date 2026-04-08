@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     alert_webhook_url: str | None = Field(default=None, alias="ALERT_WEBHOOK_URL")
 
+    # Feature flags
+    enable_ksef: bool = Field(default=True, alias="ENABLE_KSEF")
+    enable_warehouse: bool = Field(default=True, alias="ENABLE_WAREHOUSE")
+    enable_payments: bool = Field(default=True, alias="ENABLE_PAYMENTS")
+
     @model_validator(mode="after")
     def _validate_production_security(self) -> "Settings":
         if self.app_env != "production":

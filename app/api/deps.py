@@ -22,6 +22,7 @@ from app.persistence.repositories.idempotency_repository import IdempotencyRepos
 from app.persistence.repositories.invoice_repository import InvoiceRepository
 from app.persistence.repositories.job_repository import JobRepository
 from app.persistence.repositories.payment_allocation_repository import PaymentAllocationRepository
+from app.persistence.repositories.stock_repository import StockRepository
 from app.persistence.repositories.transmission_repository import TransmissionRepository
 from app.persistence.repositories.user_repository import UserRepository
 from app.services.audit_service import AuditService
@@ -32,6 +33,7 @@ from app.services.invoice_service import InvoiceService
 from app.services.ksef_session_service import KSeFSessionService
 from app.services.payment_service import PaymentService
 from app.services.settings_service import SettingsService
+from app.services.stock_service import StockService
 from app.services.transmission_service import TransmissionService
 
 
@@ -89,6 +91,10 @@ def get_invoice_service(
         contractor_repository=ContractorRepository(session),
         contractor_override_repository=ContractorOverrideRepository(session),
         audit_service=audit_service,
+        stock_service=StockService(
+            session=session,
+            stock_repository=StockRepository(session),
+        ),
     )
 
 
@@ -159,4 +165,13 @@ def get_current_user(
         raise UnauthorizedError("Brak tokenu dostepu.")
 
     return auth_service.get_authenticated_user(credentials.credentials)
+
+
+def get_stock_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> StockService:
+    return StockService(
+        session=session,
+        stock_repository=StockRepository(session),
+    )
 

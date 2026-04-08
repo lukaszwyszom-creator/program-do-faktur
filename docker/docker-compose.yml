@@ -5,11 +5,22 @@ services:
       dockerfile: docker/Dockerfile
     env_file:
       - ../.env
+    environment:
+      TZ: UTC
     ports:
       - "8000:8000"
+    restart: always
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ifg_net
 
   worker:
     build:
@@ -18,26 +29,42 @@ services:
     command: ["sh", "-c", "python -m app.worker"]
     env_file:
       - ../.env
+    environment:
+      TZ: UTC
+    restart: always
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - ifg_net
 
   db:
     image: postgres:17
     environment:
-      POSTGRES_DB: ksef_backend
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-ksef_backend}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: UTC
+      PGTZ: UTC
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ksef_backend"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ksef_backend}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "5432:5432"
+    # Nie wystawiaj portu 5432 na host w produkcji.
+    # Odkomentuj tylko do debugowania lokalnego:
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - ifg_net
 
 volumes:
   postgres_data:
+
+networks:
+  ifg_net:
+    driver: bridge
 

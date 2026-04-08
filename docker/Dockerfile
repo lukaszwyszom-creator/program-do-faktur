@@ -1,8 +1,12 @@
 FROM python:3.13-slim
 
+ENV TZ=UTC \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Zależności systemowe wymagane przez WeasyPrint (libpango, libcairo)
+# Zależności systemowe wymagane przez WeasyPrint (libpango, libcairo) + curl (healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
@@ -12,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 \
     fonts-liberation \
     shared-mime-info \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
