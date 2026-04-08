@@ -12,6 +12,10 @@ frontend-react/dist/
 
 # Temp
 _tmp_session.py
+test_check.db
+
+# Docs - large PDFs
+docs/*.pdf
 
 # Tests cache
 .pytest_cache/
