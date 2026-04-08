@@ -1,0 +1,39 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.table th {
+  color: var(--color-text-3);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--color-border);
+}
+.table th:first-child { text-align: left; }
+.table td {
+  padding: 8px 8px;
+  text-align: right;
+  color: var(--color-text-2);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.table td:first-child { text-align: left; }
+.rate { font-weight: 600; color: var(--color-gold); }
+.vatCol { color: var(--color-warning); }
+.totalRow td {
+  font-weight: 700;
+  color: var(--color-text);
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+  padding-top: 10px;
+}
+.empty { text-align: center !important; color: var(--color-text-3); padding: 20px; }

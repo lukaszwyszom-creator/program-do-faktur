@@ -33,6 +33,46 @@ class ContractorService:
         self.regon_client = regon_client
         self.regon_mapper = regon_mapper
 
+    def create_manual(self, nip: str, name: str, city: str, postal_code: str,
+                       street: str | None, building_no: str | None,
+                       apartment_no: str | None, actor: AuthenticatedUser) -> dict:
+        """Tworzy kontrahenta ręcznie (bez zapytania do REGON).
+
+        Używane wyłącznie w środowiskach testowych / dla kontrahentów zagranicznych.
+        """
+        normalized_nip = nip.strip()
+        existing = self.contractor_repository.get_by_nip(normalized_nip)
+        if existing is not None:
+            return self._build_response(
+                existing,
+                self.contractor_override_repository.get_active_by_contractor_id(existing.id),
+            )
+
+        from datetime import UTC, datetime
+        contractor = ContractorORM(
+            nip=normalized_nip,
+            name=name,
+            city=city,
+            postal_code=postal_code,
+            street=street,
+            building_no=building_no,
+            apartment_no=apartment_no,
+            source="manual",
+            source_fetched_at=datetime.now(UTC),
+        )
+        self.contractor_repository.add(contractor)
+        self.audit_service.record(
+            actor_user_id=actor.user_id,
+            actor_role=actor.role,
+            event_type="contractor.manual_create",
+            entity_type="contractor",
+            entity_id=str(contractor.id),
+            metadata={"nip": normalized_nip},
+        )
+        self.session.commit()
+        self.session.refresh(contractor)
+        return self._build_response(contractor, None)
+
     def get_by_nip(self, nip: str, actor: AuthenticatedUser, force_refresh: bool = False) -> dict:
         normalized_nip = self._normalize_nip(nip)
         self._validate_nip(normalized_nip)

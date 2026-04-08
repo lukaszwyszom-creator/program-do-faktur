@@ -27,6 +27,13 @@ class KSeFClientError(Exception):
         self.transient = transient
 
 
+class KSeFSessionExpiredError(KSeFClientError):
+    """KSeF zwrócił 401/403 — token sesji wygasł lub jest nieważny."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message, status_code=status_code, transient=False)
+
+
 @dataclass
 class SendInvoiceResult:
     reference_number: str
@@ -152,6 +159,13 @@ class KSeFClient:
 
                 if response.status_code == 200:
                     return response
+
+                if response.status_code in (401, 403):
+                    raise KSeFSessionExpiredError(
+                        f"KSeF: sesja wygasła lub nieautoryzowana "
+                        f"({response.status_code}): {response.text[:200]}",
+                        status_code=response.status_code,
+                    )
 
                 transient = response.status_code in _TRANSIENT_STATUS_CODES
                 last_exc = KSeFClientError(

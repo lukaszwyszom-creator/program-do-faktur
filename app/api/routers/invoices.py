@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.api.deps import get_current_user, get_idempotency_service, get_invoice_service
 from app.core.exceptions import ConflictError
@@ -14,7 +14,7 @@ from app.domain.exceptions import InvalidInvoiceError, InvalidStatusTransitionEr
 from app.schemas.invoice import InvoiceCreateRequest, InvoiceListResponse, InvoiceResponse
 from app.services.idempotency_service import DuplicateRequestError, IdempotencyService
 from app.services.invoice_service import InvoiceService
-from app.services.pdf_service import render_invoice_html
+from app.services.pdf_service import render_invoice_html, render_invoice_pdf
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -25,6 +25,7 @@ def list_invoices(
     issue_date_from: date | None = Query(default=None),
     issue_date_to: date | None = Query(default=None),
     number_filter: str | None = Query(default=None),
+    direction: str | None = Query(default=None, pattern="^(sale|purchase)$"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     invoice_service: Annotated[InvoiceService, Depends(get_invoice_service)] = ...,
@@ -37,6 +38,7 @@ def list_invoices(
         issue_date_from=issue_date_from,
         issue_date_to=issue_date_to,
         number_filter=number_filter,
+        direction=direction,
     )
     return InvoiceListResponse(
         items=[InvoiceResponse.from_domain(i) for i in items],
@@ -102,14 +104,33 @@ def mark_invoice_as_ready(
     return InvoiceResponse.from_domain(invoice)
 
 
-@router.get("/{invoice_id}/pdf", response_class=HTMLResponse)
-def get_invoice_pdf(
+@router.get("/{invoice_id}/preview", response_class=HTMLResponse)
+def get_invoice_preview(
     invoice_id: UUID,
     invoice_service: Annotated[InvoiceService, Depends(get_invoice_service)] = ...,
     _: Annotated[AuthenticatedUser, Depends(get_current_user)] = ...,
 ) -> HTMLResponse:
+    """Podgląd HTML faktury — otwierany w nowej karcie, gotowy do druku (Ctrl+P)."""
     invoice = invoice_service.get_invoice(invoice_id)
     schema = InvoiceResponse.from_domain(invoice)
     html = render_invoice_html(schema)
     return HTMLResponse(content=html)
+
+
+@router.get("/{invoice_id}/pdf")
+def get_invoice_pdf(
+    invoice_id: UUID,
+    invoice_service: Annotated[InvoiceService, Depends(get_invoice_service)] = ...,
+    _: Annotated[AuthenticatedUser, Depends(get_current_user)] = ...,
+) -> Response:
+    """Pobierz fakturę jako plik PDF (application/pdf)."""
+    invoice = invoice_service.get_invoice(invoice_id)
+    schema = InvoiceResponse.from_domain(invoice)
+    pdf_bytes = render_invoice_pdf(schema)
+    filename = f"faktura-{schema.number_local or schema.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 

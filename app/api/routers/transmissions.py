@@ -15,6 +15,7 @@ from app.schemas.transmission import (
     RetryTransmissionResponse,
     SubmitInvoiceResponse,
     TransmissionListResponse,
+    TransmissionPageResponse,
     TransmissionResponse,
 )
 from app.services.transmission_service import TransmissionService
@@ -22,6 +23,22 @@ from app.services.transmission_service import TransmissionService
 router = APIRouter(prefix="/transmissions", tags=["transmissions"])
 
 _TERMINAL_STATUSES = {TransmissionStatus.SUCCESS, TransmissionStatus.FAILED_PERMANENT}
+
+
+@router.get("/", response_model=TransmissionPageResponse)
+def list_transmissions(
+    page: int = 1,
+    size: int = 20,
+    transmission_service: Annotated[TransmissionService, Depends(get_transmission_service)] = ...,
+    _: Annotated[AuthenticatedUser, Depends(get_current_user)] = ...,
+) -> TransmissionPageResponse:
+    items, total = transmission_service.list_all(page=page, size=size)
+    return TransmissionPageResponse(
+        items=[TransmissionResponse.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        size=size,
+    )
 
 
 @router.post("/submit/{invoice_id}", response_model=SubmitInvoiceResponse, status_code=202)

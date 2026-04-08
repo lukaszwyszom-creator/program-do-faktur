@@ -81,6 +81,7 @@ class InvoiceService:
             id=uuid4(),
             number_local=None,
             status=InvoiceStatus.DRAFT,
+            direction=data.get("direction", "sale"),
             issue_date=issue_date,
             sale_date=sale_date,
             delivery_date=delivery_date,
@@ -127,6 +128,7 @@ class InvoiceService:
         issue_date_from: date | None = None,
         issue_date_to: date | None = None,
         number_filter: str | None = None,
+        direction: str | None = None,
     ) -> tuple[list[Invoice], int]:
         return self.invoice_repository.list_paginated(
             status=status,
@@ -135,6 +137,7 @@ class InvoiceService:
             issue_date_from=issue_date_from,
             issue_date_to=issue_date_to,
             number_filter=number_filter,
+            direction=direction,
         )
 
     def mark_as_ready(

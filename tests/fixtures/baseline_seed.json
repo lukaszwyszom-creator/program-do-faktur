@@ -1,0 +1,60 @@
+{
+  "_meta": {
+    "created": "2026-04-07",
+    "description": "Bazowy zestaw danych testowych zamrozony po cold-start E2E blok 1",
+    "stack": "docker-compose (db + api)",
+    "migrations": "alembic upgrade head (0007_f6a7b8c9d0e1_ksef_hardening)"
+  },
+  "admin": {
+    "username": "admin",
+    "password": "admin123!",
+    "role": "admin",
+    "source": "INITIAL_ADMIN_USERNAME/PASSWORD z .env"
+  },
+  "contractors": {
+    "krajowy": {
+      "id": "cf7d0cd4-f26e-410d-948d-af29445ccf58",
+      "nip": "1234563218",
+      "name": "Firma Testowa Krajowa Sp. z o.o.",
+      "city": "Warszawa",
+      "postal_code": "00-001",
+      "street": "ul. Testowa",
+      "building_no": "1",
+      "country": "PL",
+      "source": "manual",
+      "note": "NIP 1234563218 — poprawny checksum (suma=118, mod11=8, ostatnia cyfra=8)"
+    },
+    "walutowy": {
+      "id": "d3b84863-84c8-4cab-86da-dac1c3cfe7ca",
+      "nip": "DE123456789",
+      "name": "Deutsche Test GmbH",
+      "city": "Berlin",
+      "postal_code": "10115",
+      "street": "Teststrasse",
+      "building_no": "10",
+      "country": "DE",
+      "source": "manual"
+    }
+  },
+  "vat_rates": {
+    "note": "Stawki VAT sa wbudowane w domain model — brak odrebnej tabeli DB",
+    "valid_values_percent": [23, 8, 5, 0],
+    "valid_values_exempt": ["ZW"],
+    "decimal_examples": {
+      "23%": "0.2300",
+      "8%": "0.0800",
+      "5%": "0.0500",
+      "0%": "0.0000"
+    }
+  },
+  "nbp_rates": {
+    "note": "Kurs pobierany on-demand z api.nbp.pl (tabela A, konfigurowalny lookback do 7 dni)",
+    "snapshot_date": "2026-04-07",
+    "EUR": {
+      "effective_date": "2026-04-07",
+      "mid": 4.2694,
+      "currency": "EUR",
+      "source_url": "https://api.nbp.pl/api/exchangerates/rates/a/EUR/?format=json"
+    }
+  }
+}

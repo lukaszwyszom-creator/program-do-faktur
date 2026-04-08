@@ -22,7 +22,7 @@ class TestTransmissionStatus:
         assert TransmissionStatus.FAILED_PERMANENT == "failed_permanent"
 
     def test_all_values_count(self):
-        assert len(TransmissionStatus) == 7
+        assert len(TransmissionStatus) == 8
 
 
 class TestUserRole:

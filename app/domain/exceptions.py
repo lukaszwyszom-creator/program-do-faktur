@@ -6,6 +6,11 @@ class InvalidInvoiceError(AppError):
     code = "invalid_invoice"
 
 
+class NoKSeFSessionError(InvalidInvoiceError):
+    """Brak aktywnej sesji KSeF — faktura nie może zostać wysłana."""
+    code = "no_ksef_session"
+
+
 class InvalidStatusTransitionError(AppError):
     status_code = 409
     code = "invalid_status_transition"

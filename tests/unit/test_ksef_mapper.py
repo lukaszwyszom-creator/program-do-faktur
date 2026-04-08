@@ -63,7 +63,7 @@ def _make_invoice(
         currency=currency,
         number_local=number_local,
         seller_snapshot=seller_snapshot or {
-            "nip": "1234567890",
+            "nip": "1000000035",
             "name": "Sprzedawca Sp. z o.o.",
             "street": "ul. Testowa",
             "building_no": "1",
@@ -72,7 +72,7 @@ def _make_invoice(
             "country": "PL",
         },
         buyer_snapshot=buyer_snapshot or {
-            "nip": "9876543210",
+            "nip": "1000000070",
             "name": "Nabywca S.A.",
             "street": "ul. Kupiecka",
             "building_no": "5",
@@ -209,7 +209,7 @@ class TestSellerSnapshot:
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
         root = _parse_xml(xml)
         nip = _text(root, "Podmiot1", "Sprzedawca", "NIP")
-        assert nip == "1234567890"
+        assert nip == "1000000035"
 
     def test_seller_name(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
@@ -248,7 +248,7 @@ class TestBuyerSnapshot:
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
         root = _parse_xml(xml)
         nip = _text(root, "Podmiot2", "Nabywca", "NIP")
-        assert nip == "9876543210"
+        assert nip == "1000000070"
 
     def test_buyer_apartment_no(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice())
@@ -443,8 +443,8 @@ class TestFA3P6DeliveryDate:
             delivery_date=date(2026, 4, 7),
             currency="PLN",
             number_local="FV/1/04/2026",
-            seller_snapshot={"nip": "1234567890", "name": "S"},
-            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            seller_snapshot={"nip": "1000000035", "name": "S"},
+            buyer_snapshot={"nip": "1000000070", "name": "B"},
             items=[_make_item()],
             total_net=Decimal("100.00"),
             total_vat=Decimal("23.00"),
@@ -466,8 +466,8 @@ class TestFA3P6DeliveryDate:
             delivery_date=date(2026, 4, 10),  # równa issue_date
             currency="PLN",
             number_local=None,
-            seller_snapshot={"nip": "1234567890", "name": "S"},
-            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            seller_snapshot={"nip": "1000000035", "name": "S"},
+            buyer_snapshot={"nip": "1000000070", "name": "B"},
             items=[_make_item()],
             total_net=Decimal("100.00"),
             total_vat=Decimal("23.00"),
@@ -535,8 +535,8 @@ class TestMappingValidation:
             sale_date=date(2026, 4, 5),
             currency="PLN",
             number_local=None,
-            seller_snapshot={"nip": "1234567890", "name": "S"},
-            buyer_snapshot={"nip": "9876543210", "name": "B"},
+            seller_snapshot={"nip": "1000000035", "name": "S"},
+            buyer_snapshot={"nip": "1000000070", "name": "B"},
             items=[],  # pusta lista — powinno rzucić KSeFMappingError
             total_net=Decimal("0"),
             total_vat=Decimal("0"),
@@ -578,7 +578,7 @@ def _make_invoice_with_type(
         currency="PLN",
         number_local="FV/1/04/2026",
         seller_snapshot={
-            "nip": "1234567890",
+            "nip": "1000000035",
             "name": "Sprzedawca Sp. z o.o.",
             "street": "ul. Testowa",
             "building_no": "1",
@@ -587,7 +587,7 @@ def _make_invoice_with_type(
             "country": "PL",
         },
         buyer_snapshot={
-            "nip": "9876543210",
+            "nip": "1000000070",
             "name": "Nabywca Sp. z o.o.",
             "street": "ul. Kupiecka",
             "building_no": "2",
@@ -613,7 +613,7 @@ class TestNIPValidation:
 
     def test_valid_10_digit_nip_passes(self):
         xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
-            "nip": "1234567890", "name": "Firma"
+            "nip": "1000000035", "name": "Firma"
         }))
         assert xml is not None
 
@@ -632,21 +632,21 @@ class TestNIPValidation:
     def test_nip_with_dashes_is_normalized(self):
         """NIP ze spacjami/kreskami jest normalizowany do 10 cyfr — nie rzuca błędu."""
         xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
-            "nip": "123-456-78-90", "name": "Firma"  # kreski → normalizacja → 10 cyfr
+            "nip": "100-000-00-35", "name": "Firma"  # kreski → normalizacja → 10 cyfr
         }))
         root = _parse_xml(xml)
         nip_el = _text(root, "Podmiot1", "Sprzedawca", "NIP")
-        assert nip_el == "1234567890"
+        assert nip_el == "1000000035"
 
     def test_nip_with_pl_prefix_passes(self):
         """NIP z prefiksem PL powinien przejść po strippingu prefiksu."""
         xml = KSeFMapper.invoice_to_xml(_make_invoice(seller_snapshot={
-            "nip": "PL1234567890", "name": "Firma"  # prefix PL
+            "nip": "PL1000000035", "name": "Firma"  # prefix PL
         }))
         root = _parse_xml(xml)
         # NIP w XML powinien być sama liczba bez PL
         nip_el = _text(root, "Podmiot1", "Sprzedawca", "NIP")
-        assert nip_el == "1234567890"
+        assert nip_el == "1000000035"
 
     def test_missing_seller_nip_raises(self):
         with pytest.raises(KSeFMappingError, match="NIP sprzedawcy"):

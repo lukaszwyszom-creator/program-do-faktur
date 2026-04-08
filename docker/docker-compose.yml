@@ -11,6 +11,17 @@ services:
       db:
         condition: service_healthy
 
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["sh", "-c", "python -m app.worker"]
+    env_file:
+      - ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:17
     environment:

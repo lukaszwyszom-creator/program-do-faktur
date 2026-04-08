@@ -1,0 +1,22 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.mono {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: var(--color-text-2);
+}
+.dash { color: var(--color-text-3); }
+.errText {
+  color: var(--color-error);
+  font-size: 0.8rem;
+  cursor: help;
+}

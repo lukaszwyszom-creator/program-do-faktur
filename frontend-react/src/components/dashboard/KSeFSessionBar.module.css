@@ -1,0 +1,63 @@
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+}
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-gold);
+  white-space: nowrap;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  flex-shrink: 0;
+}
+.sessionInfo {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ref {
+  color: var(--color-text-2);
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+}
+.noSession {
+  font-size: 0.82rem;
+  color: var(--color-text-3);
+}
+.nipInput {
+  width: 130px;
+  font-size: 0.85rem;
+  padding: 4px 8px;
+}
+.alertRow {
+  width: 100%;
+  margin-top: 4px;
+}

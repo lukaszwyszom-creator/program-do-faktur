@@ -33,8 +33,8 @@ def _make_ready_invoice() -> Invoice:
         issue_date=date(2026, 4, 6),
         sale_date=date(2026, 4, 6),
         currency="PLN",
-        seller_snapshot={"nip": "1234567890", "name": "Sprzedawca Sp. z o.o."},
-        buyer_snapshot={"nip": "0987654321", "name": "Nabywca S.A."},
+        seller_snapshot={"nip": "1000000035", "name": "Sprzedawca Sp. z o.o."},
+        buyer_snapshot={"nip": "1000000070", "name": "Nabywca S.A."},
         items=[
             InvoiceItem(
                 name="Usługa projektowa",
@@ -233,10 +233,11 @@ class TestKSeFWorkflowE2E:
         assert invoice.status == InvoiceStatus.ACCEPTED
 
     def test_submit_transient_error_retryable(self, mock_session: MagicMock):
-        """Błąd przejściowy przy submit → FAILED_RETRYABLE, brak job poll."""
+        """Błąd przejściowy przy submit → FAILED_TEMPORARY, retry job zaplanowany."""
         invoice = _make_ready_invoice()
         transmission = MagicMock()
         transmission.invoice_id = invoice.id
+        transmission.attempt_no = 1
 
         submit_handler = _make_submit_handler(mock_session, transmission, invoice)
         submit_handler._ksef_client.send_invoice.side_effect = KSeFClientError(  # type: ignore[attr-defined]
@@ -248,5 +249,5 @@ class TestKSeFWorkflowE2E:
             "invoice_id": str(invoice.id),
         })
 
-        assert transmission.status == TransmissionStatus.FAILED_RETRYABLE
-        submit_handler._job_repo.add.assert_not_called()  # type: ignore[attr-defined]
+        assert transmission.status == TransmissionStatus.FAILED_TEMPORARY
+        submit_handler._job_repo.add.assert_called_once()  # type: ignore[attr-defined]

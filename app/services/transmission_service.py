@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import NotFoundError
 from app.core.security import AuthenticatedUser
 from app.domain.enums import InvoiceStatus, TransmissionStatus
-from app.domain.exceptions import InvalidInvoiceError, InvalidStatusTransitionError
+from app.domain.exceptions import InvalidInvoiceError, InvalidStatusTransitionError, NoKSeFSessionError
 from app.persistence.models.background_job import BackgroundJob
 from app.persistence.models.transmission import TransmissionORM
 from app.persistence.repositories.invoice_repository import InvoiceRepository
@@ -25,7 +26,7 @@ _ACTIVE_STATUSES = (
     TransmissionStatus.SUBMITTED,
     TransmissionStatus.WAITING_STATUS,
 )
-_RETRYABLE_STATUSES = (TransmissionStatus.FAILED_RETRYABLE,)
+_RETRYABLE_STATUSES = (TransmissionStatus.FAILED_RETRYABLE, TransmissionStatus.FAILED_TEMPORARY)
 
 MAX_RETRY_ATTEMPTS = 5
 
@@ -38,12 +39,14 @@ class TransmissionService:
         invoice_repository: InvoiceRepository,
         job_repository: JobRepository,
         audit_service: AuditService,
+        ksef_session_service=None,
     ) -> None:
         self.session = session
         self._transmission_repo = transmission_repository
         self._invoice_repo = invoice_repository
         self._job_repo = job_repository
         self._audit_service = audit_service
+        self._ksef_session_service = ksef_session_service
 
     # -------------------------------------------------------------------------
     # PUBLIC API
@@ -69,7 +72,31 @@ class TransmissionService:
                 f"(status: {active.status})."
             )
 
+        # Walidacja domenowa przed enqueue — rzuca InvalidInvoiceError przy błędach
+        invoice.validate_for_ksef()
+
+        # Sprawdzenie aktywnej sesji KSeF przed insertowaniem transmisji
+        # (fail-fast na poziomie API zamiast poźniej w workerze)
+        if self._ksef_session_service is not None:
+            seller_nip = (invoice.seller_snapshot or {}).get("nip", "")
+            if seller_nip:
+                try:
+                    self._ksef_session_service.get_active_session(seller_nip)
+                except NotFoundError:
+                    raise NoKSeFSessionError(
+                        f"Brak aktywnej sesji KSeF dla NIP sprzedawcy {seller_nip}. "
+                        "Utwórz sesję przez POST /api/v1/ksef-sessions/ przed wysyłką."
+                    )
+
         now = datetime.now(UTC)
+
+        # Deterministyczny idempotency_key: hash(invoice_id + updated_at) —
+        # identyczny dla równoległych requestów tej samej wersji faktury,
+        # zmienia się po edycji faktury (nowa updated_at).
+        idempotency_key = hashlib.sha256(
+            f"{invoice_id}:{invoice.updated_at.isoformat()}".encode()
+        ).hexdigest()
+
         transmission = TransmissionORM(
             id=uuid4(),
             invoice_id=invoice_id,
@@ -77,13 +104,14 @@ class TransmissionService:
             operation_type="submit",
             status=TransmissionStatus.QUEUED,
             attempt_no=1,
-            idempotency_key=str(uuid4()),
+            idempotency_key=idempotency_key,
             created_at=now,
         )
         saved_transmission = self._transmission_repo.add(transmission)
 
         invoice.transition_to(InvoiceStatus.SENDING)
         invoice.updated_at = now
+        self._invoice_repo.update(invoice_id, invoice)
 
         self._job_repo.add(
             BackgroundJob(
@@ -136,6 +164,17 @@ class TransmissionService:
                 f"dla transmisji {transmission_id}."
             )
 
+        # Guard: blokuj retry gdy inna transmisja dla tej faktury jest już aktywna
+        other_active = self._transmission_repo.get_active_for_invoice(
+            transmission.invoice_id, _ACTIVE_STATUSES
+        )
+        if other_active is not None and other_active.id != transmission.id:
+            raise InvalidInvoiceError(
+                f"Faktura {transmission.invoice_id} ma już aktywną transmisję "
+                f"{other_active.id} (status: {other_active.status}). "
+                "Retry zablokowany."
+            )
+
         now = datetime.now(UTC)
         transmission.attempt_no += 1
         transmission.status = TransmissionStatus.QUEUED
@@ -176,3 +215,6 @@ class TransmissionService:
 
     def list_for_invoice(self, invoice_id: UUID) -> list[TransmissionORM]:
         return self._transmission_repo.list_for_invoice(invoice_id)
+
+    def list_all(self, page: int, size: int) -> tuple[list[TransmissionORM], int]:
+        return self._transmission_repo.list_all_paginated(page, size)

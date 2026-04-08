@@ -216,8 +216,8 @@ class TestFA3NewFields:
 # ---------------------------------------------------------------------------
 
 def _make_full_invoice(
-    seller_nip: str = "1234567890",
-    buyer_nip: str | None = "9876543210",
+    seller_nip: str = "1000000035",
+    buyer_nip: str | None = "1000000070",
     total_net: str = "100.00",
     total_vat: str = "23.00",
     total_gross: str = "123.00",
@@ -260,9 +260,9 @@ class TestValidateForKSeF:
             _make_full_invoice(seller_nip="123456789").validate_for_ksef()
 
     def test_invalid_seller_nip_with_dash(self):
-        """NIP z kreskami (123-456-78-90) jest akceptowany przez _is_valid_nip (normalizacja)."""
+        """NIP z kreskami (100-000-00-35) jest akceptowany — kreski są normalizowane."""
         # Nie oczekujemy błędu dla NIP z kreskami — są one normalizowane do 10 cyfr
-        _make_full_invoice(seller_nip="123-456-78-90").validate_for_ksef()
+        _make_full_invoice(seller_nip="100-000-00-35").validate_for_ksef()
 
     def test_invalid_buyer_nip_raises(self):
         with pytest.raises(InvalidInvoiceError, match="NIP nabywcy"):

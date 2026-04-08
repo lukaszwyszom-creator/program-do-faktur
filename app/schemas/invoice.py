@@ -22,6 +22,7 @@ class InvoiceCreateRequest(BaseModel):
     sale_date: date
     delivery_date: date | None = None
     currency: str = "PLN"
+    direction: str = "sale"
     items: list[InvoiceItemInput]
     invoice_type: InvoiceType = InvoiceType.VAT
     correction_of_invoice_id: UUID | None = None
@@ -74,6 +75,7 @@ class InvoiceResponse(BaseModel):
     total_gross: Decimal
     payment_status: str = "unpaid"
     invoice_type: str = "VAT"
+    direction: str = "sale"
     correction_of_invoice_id: UUID | None = None
     correction_of_ksef_number: str | None = None
     correction_reason: str | None = None
@@ -100,6 +102,7 @@ class InvoiceResponse(BaseModel):
             total_gross=invoice.total_gross,
             payment_status=invoice.payment_status,
             invoice_type=invoice.invoice_type.value,
+            direction=invoice.direction,
             correction_of_invoice_id=invoice.correction_of_invoice_id,
             correction_of_ksef_number=invoice.correction_of_ksef_number,
             correction_reason=invoice.correction_reason,

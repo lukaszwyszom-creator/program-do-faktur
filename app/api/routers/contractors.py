@@ -5,10 +5,30 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_contractor_service, get_current_user
 from app.core.security import AuthenticatedUser
-from app.schemas.contractor import ContractorOverrideRequest, ContractorResponse
+from app.schemas.contractor import ContractorManualCreateRequest, ContractorOverrideRequest, ContractorResponse
 from app.services.contractor_service import ContractorService
 
 router = APIRouter(prefix="/contractors", tags=["contractors"])
+
+
+@router.post("/", response_model=ContractorResponse, status_code=201)
+def create_contractor_manual(
+	payload: ContractorManualCreateRequest,
+	contractor_service: Annotated[ContractorService, Depends(get_contractor_service)],
+	current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+) -> ContractorResponse:
+	return ContractorResponse.model_validate(
+		contractor_service.create_manual(
+			nip=payload.nip,
+			name=payload.name,
+			city=payload.city,
+			postal_code=payload.postal_code,
+			street=payload.street,
+			building_no=payload.building_no,
+			apartment_no=payload.apartment_no,
+			actor=current_user,
+		)
+	)
 
 
 @router.get("/by-nip/{nip}", response_model=ContractorResponse)

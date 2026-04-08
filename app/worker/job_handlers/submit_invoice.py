@@ -1,13 +1,14 @@
 ﻿from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import NotFoundError
 from app.domain.enums import TransmissionStatus
-from app.integrations.ksef.client import KSeFClient, KSeFClientError
+from app.integrations.ksef.client import KSeFClient, KSeFClientError, KSeFSessionExpiredError
 from app.integrations.ksef.exceptions import KSeFMappingError
 from app.integrations.ksef.mapper import KSeFMapper
 from app.persistence.models.background_job import BackgroundJob
@@ -17,6 +18,13 @@ from app.persistence.repositories.transmission_repository import TransmissionRep
 from app.services.ksef_session_service import KSeFSessionService
 
 logger = logging.getLogger(__name__)
+
+_MAX_AUTO_RETRY_ATTEMPTS = 5
+
+
+def _backoff_minutes(attempt_no: int) -> int:
+    """Wykładniczy backoff: 1, 2, 4, 8, 16 minut dla prób 1–5."""
+    return 2 ** min(attempt_no - 1, 4)
 
 
 class SubmitInvoiceJobHandler:
@@ -115,14 +123,72 @@ class SubmitInvoiceJobHandler:
             transmission.finished_at = datetime.now(UTC)
             self.session.flush()
 
+        except NotFoundError as exc:
+            # Brak aktywnej sesji KSeF — retryable (sesja może zostać otwarta między próbami)
+            logger.warning(
+                "submit_invoice: brak sesji KSeF dla transmisji %s (NIP=%s): %s",
+                transmission_id,
+                (invoice.seller_snapshot or {}).get("nip", "?") if invoice else "?",
+                exc,
+            )
+            now = datetime.now(UTC)
+            transmission.status = TransmissionStatus.FAILED_RETRYABLE
+            transmission.error_code = "NO_KSEF_SESSION"
+            transmission.error_message = str(exc)[:512]
+            transmission.finished_at = now
+            self.session.flush()
+
+        except KSeFSessionExpiredError as exc:
+            # KSeF zwrócił 401/403 — token wygasł, invalidujemy sesję i planujemy retry
+            seller_nip = (invoice.seller_snapshot or {}).get("nip", "") if invoice else ""
+            logger.warning(
+                "submit_invoice: wygasła sesja KSeF dla transmisji %s (NIP=%s): %s",
+                transmission_id,
+                seller_nip,
+                exc,
+            )
+            if seller_nip:
+                try:
+                    self._ksef_session_service.mark_session_expired(seller_nip)
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "submit_invoice: nie udało się unieważnić sesji dla NIP %s.",
+                        seller_nip,
+                    )
+            now = datetime.now(UTC)
+            transmission.status = TransmissionStatus.FAILED_RETRYABLE
+            transmission.error_code = "SESSION_EXPIRED"
+            transmission.error_message = str(exc)[:512]
+            transmission.finished_at = now
+            self.session.flush()
+
         except KSeFClientError as exc:
-            if exc.transient:
-                transmission.status = TransmissionStatus.FAILED_RETRYABLE
+            now = datetime.now(UTC)
+            if exc.transient and transmission.attempt_no < _MAX_AUTO_RETRY_ATTEMPTS:
+                backoff = timedelta(minutes=_backoff_minutes(transmission.attempt_no))
+                retry_at = now + backoff
+                transmission.attempt_no += 1
+                transmission.status = TransmissionStatus.FAILED_TEMPORARY
+                transmission.next_retry_at = retry_at
+                transmission.error_code = str(exc.status_code) if exc.status_code else "UNKNOWN"
+                transmission.error_message = str(exc)
+                transmission.finished_at = now
+                self._job_repo.add(BackgroundJob(
+                    id=uuid4(),
+                    job_type="submit_invoice",
+                    status="pending",
+                    available_at=retry_at,
+                    payload_json={
+                        "transmission_id": str(transmission.id),
+                        "invoice_id": str(transmission.invoice_id),
+                    },
+                    created_at=now,
+                ))
             else:
                 transmission.status = TransmissionStatus.FAILED_PERMANENT
-            transmission.error_code = str(exc.status_code) if exc.status_code else "UNKNOWN"
-            transmission.error_message = str(exc)
-            transmission.finished_at = datetime.now(UTC)
+                transmission.error_code = str(exc.status_code) if exc.status_code else "UNKNOWN"
+                transmission.error_message = str(exc)
+                transmission.finished_at = now
             self.session.flush()
 
         except Exception as exc:
@@ -130,8 +196,27 @@ class SubmitInvoiceJobHandler:
                 "submit_invoice: nieoczekiwany blad dla transmisji %s.",
                 transmission_id,
             )
-            transmission.status = TransmissionStatus.FAILED_RETRYABLE
+            now = datetime.now(UTC)
+            if transmission.attempt_no < _MAX_AUTO_RETRY_ATTEMPTS:
+                backoff = timedelta(minutes=_backoff_minutes(transmission.attempt_no))
+                retry_at = now + backoff
+                transmission.attempt_no += 1
+                transmission.status = TransmissionStatus.FAILED_TEMPORARY
+                transmission.next_retry_at = retry_at
+                self._job_repo.add(BackgroundJob(
+                    id=uuid4(),
+                    job_type="submit_invoice",
+                    status="pending",
+                    available_at=retry_at,
+                    payload_json={
+                        "transmission_id": str(transmission.id),
+                        "invoice_id": str(transmission.invoice_id),
+                    },
+                    created_at=now,
+                ))
+            else:
+                transmission.status = TransmissionStatus.FAILED_PERMANENT
             transmission.error_code = "INTERNAL_ERROR"
             transmission.error_message = str(exc)[:512]
-            transmission.finished_at = datetime.now(UTC)
+            transmission.finished_at = now
             self.session.flush()

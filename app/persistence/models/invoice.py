@@ -44,7 +44,8 @@ class InvoiceORM(Base):
     exchange_rate_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # ZAL/ROZ
     advance_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
-    settled_advance_ids_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Kierunek dokumentu: 'sale' (domyślnie — faktury sprzedaży) | 'purchase'
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, server_default="sale", index=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -53,3 +54,9 @@ class InvoiceORM(Base):
     transmissions = relationship("TransmissionORM", back_populates="invoice", cascade="all, delete-orphan")
     created_by_user = relationship("UserORM", back_populates="created_invoices")
     payment_allocations = relationship("PaymentAllocationORM", back_populates="invoice", cascade="all, delete-orphan")
+    advance_links = relationship(
+        "InvoiceAdvanceLinkORM",
+        foreign_keys="InvoiceAdvanceLinkORM.invoice_id",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )

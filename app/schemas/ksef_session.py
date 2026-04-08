@@ -14,6 +14,7 @@ class OpenSessionRequest(BaseModel):
 
 class KSeFSessionResponse(BaseModel):
     id: UUID
+    nip: str
     environment: str
     auth_method: str
     session_reference: str | None

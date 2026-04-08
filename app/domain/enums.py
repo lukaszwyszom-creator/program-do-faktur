@@ -67,7 +67,8 @@ class TransmissionStatus(StrEnum):
     SUBMITTED = "submitted"              # XML przyjety przez API KSeF, oczekujemy na potwierdzenie
     WAITING_STATUS = "waiting_status"    # polling odpytuje KSeF, wynik jeszcze nieznany
     SUCCESS = "success"                  # KSeF potwierdzil przyjecie faktury (kod 200)
-    FAILED_RETRYABLE = "failed_retryable"  # blad przejsciowy, mozna ponowic
+    FAILED_TEMPORARY = "failed_temporary"  # blad przejsciowy, retry zaplanowany automatycznie
+    FAILED_RETRYABLE = "failed_retryable"  # blad przejsciowy, oczekuje na reczny retry
     FAILED_PERMANENT = "failed_permanent"  # blad trwaly (blad mapowania, odrzucenie przez KSeF)
 
 

@@ -28,6 +28,11 @@ class UnauthorizedError(AppError):
     code = "unauthorized"
 
 
+class ValidationError(AppError):
+    status_code = 422
+    code = "validation_error"
+
+
 class ExternalServiceError(AppError):
     status_code = 502
     code = "external_service_error"

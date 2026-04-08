@@ -167,6 +167,19 @@ class KSeFSessionService:
 
         return orm
 
+    def mark_session_expired(self, nip: str) -> None:
+        """Oznacza aktywną sesję KSeF dla danego NIP jako wygasłą.
+
+        Wywoływana przez worker gdy KSeF zwróci 401/403 w trakcie wysyłki.
+        Nie rzuca wyjątku jeśli aktywna sesja nie istnieje.
+        """
+        orm = self._get_active_db_session(nip)
+        if orm is not None:
+            orm.status = SESSION_EXPIRED
+            orm.updated_at = datetime.now(UTC)
+            self.session.flush()
+        self._invalidate_cache(nip)
+
     def get_session_by_id(self, session_id: UUID) -> KSeFSessionORM:
         orm = self.session.get(KSeFSessionORM, session_id)
         if orm is None:

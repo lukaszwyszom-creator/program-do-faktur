@@ -8,6 +8,7 @@ from app.domain.models.invoice import Invoice, InvoiceItem
 from app.persistence.models.contractor import ContractorORM
 from app.persistence.models.contractor_override import ContractorOverrideORM
 from app.persistence.models.invoice import InvoiceORM
+from app.persistence.models.invoice_advance_link import InvoiceAdvanceLinkORM
 from app.persistence.models.invoice_item import InvoiceItemORM
 
 _SNAPSHOT_FIELDS = (
@@ -61,8 +62,9 @@ class InvoiceMapper:
             exchange_rate=orm.exchange_rate,
             exchange_rate_date=orm.exchange_rate_date,
             advance_amount=orm.advance_amount,
+            direction=orm.direction if orm.direction else "sale",
             settled_advance_ids=[
-                UUID(str(uid)) for uid in (orm.settled_advance_ids_json or [])
+                link.advance_invoice_id for link in orm.advance_links
             ],
         )
 
@@ -94,12 +96,16 @@ class InvoiceMapper:
             exchange_rate=invoice.exchange_rate,
             exchange_rate_date=invoice.exchange_rate_date,
             advance_amount=invoice.advance_amount,
-            settled_advance_ids_json=[str(uid) for uid in invoice.settled_advance_ids],
+            direction=invoice.direction,
             created_by=invoice.created_by,
         )
         orm.items = [
             InvoiceMapper._item_to_orm(item, invoice.id)
             for item in invoice.items
+        ]
+        orm.advance_links = [
+            InvoiceAdvanceLinkORM(invoice_id=invoice.id, advance_invoice_id=uid)
+            for uid in invoice.settled_advance_ids
         ]
         return orm
 
@@ -129,7 +135,16 @@ class InvoiceMapper:
         orm.exchange_rate = invoice.exchange_rate
         orm.exchange_rate_date = invoice.exchange_rate_date
         orm.advance_amount = invoice.advance_amount
-        orm.settled_advance_ids_json = [str(uid) for uid in invoice.settled_advance_ids]
+        orm.direction = invoice.direction
+
+        # Bezpieczna aktualizacja kolekcji in-place — unika problemów
+        # lazy-load/DetachedInstanceError przy przypisaniu całej nowej listy.
+        # cascade="all, delete-orphan" zadba o usunięcie usuniętych obiektów.
+        del orm.advance_links[:]
+        orm.advance_links.extend(
+            InvoiceAdvanceLinkORM(invoice_id=invoice.id, advance_invoice_id=uid)
+            for uid in invoice.settled_advance_ids
+        )
 
         # Synchronizacja pozycji — zastąpienie kolekcji.
         # Relacja ma cascade="all, delete-orphan", więc SQLAlchemy

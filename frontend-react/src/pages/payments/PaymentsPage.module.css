@@ -1,0 +1,91 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.pageTitle {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-gold);
+  margin: 0;
+}
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+.importBox {
+  padding: 16px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+.importRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.tableSection {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.rowBtns {
+  display: flex;
+  gap: 6px;
+}
+.titleCell {
+  display: block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.positive { color: var(--color-success); font-weight: 600; }
+.negative { color: var(--color-error);   font-weight: 600; }
+
+/* Allocate overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-width: 340px;
+  max-width: 480px;
+  width: 100%;
+}
+.allocatePanel {
+  display: flex;
+  flex-direction: column;
+}
+.allocateHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.fieldLabel {
+  font-size: 0.8rem;
+  color: var(--color-text-2);
+  margin-bottom: 4px;
+}

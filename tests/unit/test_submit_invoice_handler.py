@@ -42,8 +42,8 @@ def _make_invoice() -> Invoice:
         issue_date=datetime(2026, 4, 5).date(),
         sale_date=datetime(2026, 4, 5).date(),
         currency="PLN",
-        seller_snapshot={"nip": "1234567890", "name": "Seller"},
-        buyer_snapshot={"nip": "0987654321", "name": "Buyer"},
+        seller_snapshot={"nip": "1000000035", "name": "Seller"},
+        buyer_snapshot={"nip": "1000000070", "name": "Buyer"},
         items=[
             InvoiceItem(
                 name="Item", quantity=Decimal("1"), unit="szt.",
@@ -76,6 +76,7 @@ class TestSubmitInvoiceHandler:
 
     def test_ksef_error_marks_retryable(self, handler: SubmitInvoiceJobHandler):
         transmission = MagicMock()
+        transmission.attempt_no = 1
         handler._transmission_repo.lock_for_update.return_value = transmission
         handler._invoice_repo.get_by_id.return_value = _make_invoice()
         handler._ksef_session_service.get_session_token.return_value = "tok"
@@ -85,7 +86,8 @@ class TestSubmitInvoiceHandler:
 
         handler.handle(_make_payload())
 
-        assert transmission.status == TransmissionStatus.FAILED_RETRYABLE
+        assert transmission.status == TransmissionStatus.FAILED_TEMPORARY
+        handler._job_repo.add.assert_called_once()  # retry job zaplanowany
 
     def test_success_creates_poll_job(self, handler: SubmitInvoiceJobHandler):
         transmission = MagicMock()
@@ -133,6 +135,7 @@ class TestSubmitInvoiceHandlerCommit10:
             raise KSeFClientError("fail", status_code=500, transient=True)
 
         transmission = MagicMock()
+        transmission.attempt_no = 1
         handler._transmission_repo.lock_for_update.return_value = transmission
         handler._invoice_repo.get_by_id.return_value = _make_invoice()
         handler._ksef_session_service.get_session_token.return_value = "tok"
@@ -158,8 +161,9 @@ class TestSubmitInvoiceHandlerCommit10:
         assert transmission.error_code == "400"
 
     def test_unexpected_exception_marks_retryable(self, handler: SubmitInvoiceJobHandler):
-        """Niespodziewany wyjątek → FAILED_RETRYABLE (nie PERMANENT)."""
+        """Niespodziewany wyjątek → FAILED_TEMPORARY (nie PERMANENT)."""
         transmission = MagicMock()
+        transmission.attempt_no = 1
         handler._transmission_repo.lock_for_update.return_value = transmission
         handler._invoice_repo.get_by_id.return_value = _make_invoice()
         handler._ksef_session_service.get_session_token.return_value = "tok"
@@ -167,7 +171,7 @@ class TestSubmitInvoiceHandlerCommit10:
 
         handler.handle(_make_payload())
 
-        assert transmission.status == TransmissionStatus.FAILED_RETRYABLE
+        assert transmission.status == TransmissionStatus.FAILED_TEMPORARY
         assert transmission.error_code == "INTERNAL_ERROR"
 
     def test_success_sets_started_at_and_finished_at(self, handler: SubmitInvoiceJobHandler):

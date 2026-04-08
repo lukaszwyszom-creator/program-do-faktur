@@ -11,8 +11,10 @@ from app.api.routers.frontend import router as frontend_router
 from app.api.routers.health import router as health_router
 from app.api.routers.invoices import router as invoices_router
 from app.api.routers.ksef_session import router as ksef_session_router
+from app.api.routers.ksef_session import router_sessions as ksef_sessions_router
 from app.api.routers.metrics import router as metrics_router
 from app.api.routers.payments import router as payments_router
+from app.api.routers.settings import router as settings_router
 from app.api.routers.transmissions import router as transmissions_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -59,7 +61,9 @@ def create_application() -> FastAPI:
     application.include_router(invoices_router, prefix=settings.api_v1_prefix)
     application.include_router(transmissions_router, prefix=settings.api_v1_prefix)
     application.include_router(ksef_session_router, prefix=settings.api_v1_prefix)
+    application.include_router(ksef_sessions_router, prefix=settings.api_v1_prefix)
     application.include_router(payments_router, prefix=settings.api_v1_prefix)
+    application.include_router(settings_router, prefix=settings.api_v1_prefix)
 
     # Statyczne pliki frontendu (CSS, JS)
     if _FRONTEND_STATIC.exists():

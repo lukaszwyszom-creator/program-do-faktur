@@ -23,7 +23,7 @@ def healthcheck(
         result = session.execute(text("SHOW timezone"))
         db_timezone = result.scalar_one_or_none()
         if db_timezone is not None:
-            db_timezone_utc = db_timezone.upper() in ("UTC", "UTC0", "UTC+0")
+            db_timezone_utc = db_timezone.upper() in ("UTC", "UTC0", "UTC+0", "ETC/UTC", "Z")
     except Exception:
         # SQLite lub brak wpsarcia dla SHOW timezone
         db_timezone = None

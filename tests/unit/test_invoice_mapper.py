@@ -63,7 +63,7 @@ def _make_invoice_orm():
     orm.exchange_rate = None
     orm.exchange_rate_date = None
     orm.advance_amount = None
-    orm.settled_advance_ids_json = None
+    orm.advance_links = []
     return orm
 
 

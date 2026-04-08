@@ -63,6 +63,7 @@ class InvoiceRepository:
         issue_date_from: date | None = None,
         issue_date_to: date | None = None,
         number_filter: str | None = None,
+        direction: str | None = None,
     ) -> tuple[list[Invoice], int]:
         base_stmt = select(InvoiceORM)
 
@@ -76,6 +77,8 @@ class InvoiceRepository:
             base_stmt = base_stmt.where(
                 InvoiceORM.number_local.ilike(f"%{number_filter}%")
             )
+        if direction is not None:
+            base_stmt = base_stmt.where(InvoiceORM.direction == direction)
 
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
         total = self.session.execute(count_stmt).scalar_one()

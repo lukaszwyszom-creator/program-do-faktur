@@ -1,14 +1,18 @@
 """
-Generowanie podglądu faktury jako HTML gotowego do druku.
+Generowanie dokumentu PDF / podglądu HTML dla faktury.
 
-Endpoint zwraca stronę HTML z @media print CSS.
-Użytkownik otwiera w nowej karcie i drukuje do PDF (Ctrl+P / File → Print).
+Dwa publiczne wywołania:
+  render_invoice_html(invoice)  → str  (text/html, do podglądu w przeglądarce)
+  render_invoice_pdf(invoice)   → bytes (application/pdf, przez WeasyPrint)
 """
 from __future__ import annotations
 
+import logging
 from html import escape
 
 from app.schemas.invoice import InvoiceResponse
+
+logger = logging.getLogger(__name__)
 
 # Klasy statusów do etykiet PL
 _STATUS_LABELS: dict[str, str] = {
@@ -168,3 +172,24 @@ def render_invoice_html(invoice: InvoiceResponse) -> str:
 
 </body>
 </html>"""
+
+
+def render_invoice_pdf(invoice: InvoiceResponse) -> bytes:
+    """Generuje binarny PDF z WeasyPrint na podstawie szablonu HTML.
+
+    Przy pierwszym wywołaniu importuje WeasyPrint (lazy import — biblioteka
+    ładuje libpango/cairo tylko przy rzeczywistym użyciu).
+    Rzuca ImportError gdy weasyprint nie jest zainstalowany.
+    """
+    try:
+        from weasyprint import HTML  # type: ignore[import-untyped]
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "WeasyPrint nie jest zainstalowany. Dodaj 'weasyprint' do requirements "
+            "i upewnij się, że systemowe biblioteki (libpango, libcairo) są dostępne."
+        ) from exc
+
+    html_content = render_invoice_html(invoice)
+    logger.debug("Generowanie PDF dla faktury %s przez WeasyPrint", invoice.id)
+    pdf_bytes: bytes = HTML(string=html_content, base_url=None).write_pdf()
+    return pdf_bytes

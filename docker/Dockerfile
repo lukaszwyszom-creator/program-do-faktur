@@ -2,9 +2,25 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+# Zależności systemowe wymagane przez WeasyPrint (libpango, libcairo)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libcairo2 \
+    libfontconfig1 \
+    fonts-liberation \
+    shared-mime-info \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
 COPY app ./app
 
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+COPY alembic.ini ./
+COPY alembic ./alembic
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --no-build-isolation .
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

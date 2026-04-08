@@ -13,6 +13,7 @@ from app.integrations.ksef.client import KSeFClient, RetryConfig
 from app.integrations.regon.client import RegonClient
 from app.integrations.regon.mapper import RegonMapper
 from app.persistence.db import get_session
+from app.persistence.repositories.app_settings_repository import AppSettingsRepository
 from app.persistence.repositories.audit_repository import AuditRepository
 from app.persistence.repositories.bank_transaction_repository import BankTransactionRepository
 from app.persistence.repositories.contractor_override_repository import ContractorOverrideRepository
@@ -30,6 +31,7 @@ from app.services.idempotency_service import IdempotencyService
 from app.services.invoice_service import InvoiceService
 from app.services.ksef_session_service import KSeFSessionService
 from app.services.payment_service import PaymentService
+from app.services.settings_service import SettingsService
 from app.services.transmission_service import TransmissionService
 
 
@@ -38,6 +40,15 @@ http_bearer = HTTPBearer(auto_error=False)
 
 def get_db_session() -> Generator[Session, None, None]:
     yield from get_session()
+
+
+def get_settings_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> SettingsService:
+    return SettingsService(
+        session=session,
+        repository=AppSettingsRepository(session),
+    )
 
 
 def get_audit_service(session: Annotated[Session, Depends(get_db_session)]) -> AuditService:
@@ -115,6 +126,7 @@ def get_ksef_session_service(
 def get_transmission_service(
     session: Annotated[Session, Depends(get_db_session)],
     audit_service: Annotated[AuditService, Depends(get_audit_service)],
+    ksef_session_service: Annotated[KSeFSessionService, Depends(get_ksef_session_service)],
 ) -> TransmissionService:
     return TransmissionService(
         session=session,
@@ -122,6 +134,7 @@ def get_transmission_service(
         invoice_repository=InvoiceRepository(session),
         job_repository=JobRepository(session),
         audit_service=audit_service,
+        ksef_session_service=ksef_session_service,
     )
 
 

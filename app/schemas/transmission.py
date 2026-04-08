@@ -45,6 +45,13 @@ class TransmissionListResponse(BaseModel):
     invoice_id: UUID
 
 
+class TransmissionPageResponse(BaseModel):
+    items: list[TransmissionResponse]
+    total: int
+    page: int
+    size: int
+
+
 class RetryTransmissionResponse(BaseModel):
     transmission_id: UUID
     attempt_no: int

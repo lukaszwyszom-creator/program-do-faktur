@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -266,42 +265,41 @@ class FA3Mapper:
 
     @staticmethod
     def _build_vat_totals(fa: etree._Element, invoice: Invoice) -> None:
-        """Emituje pola P_13_x / P_14_x (i P_14_xW dla walut obcych)."""
-        items = invoice.items
-        is_foreign = invoice.currency != "PLN"
+        """Emituje pola P_13_x / P_14_x (i P_14_xW dla walut obcych).
 
-        if not items:
+        Dane pobiera z ``invoice.aggregate_vat_totals()`` — metody domeny,
+        która agreguje sumy z pozycji faktury.
+        """
+        is_foreign = invoice.currency != "PLN"
+        totals = invoice.aggregate_vat_totals()
+
+        if not totals:
+            # Fallback gdy brak pozycji (nie powinno wystąpić po walidacji)
             _el(fa, "P_13_1", _fmt(invoice.total_net))
             _el(fa, "P_14_1", _fmt(invoice.total_vat))
             return
 
-        net_by_rate: dict[str, Decimal] = defaultdict(Decimal)
-        vat_by_rate: dict[str, Decimal] = defaultdict(Decimal)
-        vat_pln_by_rate: dict[str, Decimal] = defaultdict(Decimal)
-
-        for item in items:
-            key = _rate_key(item.vat_rate)
-            net_by_rate[key] += item.net_total
-            vat_by_rate[key] += item.vat_total
-            if is_foreign and item.vat_amount_pln is not None:
-                vat_pln_by_rate[key] += item.vat_amount_pln
-
-        for key in sorted(net_by_rate):
+        for rate_decimal, (net_sum, vat_sum, vat_pln_sum) in sorted(
+            totals.items(), key=lambda kv: _rate_key(kv[0])
+        ):
+            key = _rate_key(rate_decimal)
             fields = _VAT_RATE_FIELDS.get(key)
             if fields is None:
-                logger.warning("Nieznana stawka VAT: %s — mapowana na P_13_1/P_14_1", key)
-                p13, p14 = "P_13_1", "P_14_1"
-            else:
-                p13, p14 = fields
+                raise KSeFMappingError(
+                    f"Nieznana stawka VAT: {rate_decimal} (klucz: '{key}'). "
+                    "Dozwolone: 23, 8, 5, 0, zw, np. "
+                    "Zaktualizuj _VAT_RATE_FIELDS lub popraw stawkę w fakturze."
+                )
+            p13, p14 = fields
 
-            _el(fa, p13, _fmt(net_by_rate[key]))
+            _el(fa, p13, _fmt(net_sum))
             if p14 is not None:
-                _el(fa, p14, _fmt(vat_by_rate[key]))
+                _el(fa, p14, _fmt(vat_sum))
                 # P_14_xW — kwota VAT w PLN (wymagana gdy currency != PLN)
                 if is_foreign:
                     p14w = _VAT_RATE_FIELDS_PLN.get(key)
-                    if p14w and vat_pln_by_rate.get(key):
-                        _el(fa, p14w, _fmt(vat_pln_by_rate[key]))
+                    if p14w and vat_pln_sum is not None:
+                        _el(fa, p14w, _fmt(vat_pln_sum))
 
     @staticmethod
     def _build_adnotacje(fa: etree._Element, invoice: Invoice) -> None:
