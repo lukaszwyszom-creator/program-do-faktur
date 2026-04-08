@@ -5,6 +5,17 @@ __pycache__/
 dist/
 build/
 
+# Node
+node_modules/
+frontend-react/node_modules/
+frontend-react/dist/
+
+# Temp
+_tmp_session.py
+
+# Tests cache
+.pytest_cache/
+
 # Virtual environment
 .venv/
 
