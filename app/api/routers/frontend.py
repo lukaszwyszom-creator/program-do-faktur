@@ -27,6 +27,7 @@ def _file(name: str) -> FileResponse:
 
 
 @router.get("/")
+@router.head("/")
 def ui_index() -> FileResponse:
     return _file("index.html")
 
