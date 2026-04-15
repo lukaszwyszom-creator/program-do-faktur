@@ -1,0 +1,90 @@
+# docker-compose.prod.yml — DS723+ (produkcja)
+# Uruchamianie:
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d
+#
+# Różnice względem dev:
+#   - osobny wolumen na klucze KSeF (ksef_keys)
+#   - frontend React zbudowany i serwowany przez nginx
+#   - brak expose portu DB na host
+#   - restart: unless-stopped
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env.production
+    environment:
+      TZ: Europe/Warsaw
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ksef_keys:/app/ksef_keys:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ifg_prod
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["sh", "-c", "python -m app.worker"]
+    env_file:
+      - ../.env.production
+    environment:
+      TZ: Europe/Warsaw
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ksef_keys:/app/ksef_keys:ro
+    networks:
+      - ifg_prod
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
+    networks:
+      - ifg_prod
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ksef_backend}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Europe/Warsaw
+      PGTZ: Europe/Warsaw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ksef_backend}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - ifg_prod
+
+volumes:
+  postgres_data:
+  ksef_keys:          # wypełnić ręcznie: docker cp lub bind mount na DS723+
+
+networks:
+  ifg_prod:
+    driver: bridge

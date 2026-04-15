@@ -25,6 +25,8 @@ docs/*.pdf
 
 # Environment config (secrets!)
 .env
+.env.production
+.env.staging
 
 # IDE
 .idea/
