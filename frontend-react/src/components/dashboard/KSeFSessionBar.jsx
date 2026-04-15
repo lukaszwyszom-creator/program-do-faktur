@@ -49,15 +49,16 @@ export default function KSeFSessionBar() {
 
   // Pobierz NIP z backendu jeśli store jest pusty
   useEffect(() => {
-    if (!storedNip) {
-      settingsApi.get()
-        .then((s) => {
-          if (s.seller_nip?.length === 10) {
-            setSellerNip(s.seller_nip);
-          }
-        })
-        .catch(() => { /* ignoruj — użytkownik wpisze ręcznie */ });
-    }
+    if (storedNip) return;
+    let cancelled = false;
+    settingsApi.get()
+      .then((s) => {
+        if (!cancelled && s.seller_nip?.length === 10) {
+          setSellerNip(s.seller_nip);
+        }
+      })
+      .catch(() => { /* ignoruj — użytkownik wpisze ręcznie */ });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

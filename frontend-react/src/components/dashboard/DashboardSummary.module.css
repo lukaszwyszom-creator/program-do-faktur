@@ -27,7 +27,39 @@
   color: var(--color-text-2);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin-bottom: 0;
+}
+
+.chartHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.chartCorner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.monthLabel {
+  font-size: 2em;
+  font-weight: 700;
+  color: #4ade80;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wybranoLabel {
+  font-size: 2em;
+  font-weight: 700;
+  color: #4ade80;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .chartEmpty {
@@ -84,6 +116,21 @@
 
 .legendPurchase {
   color: #60a5fa;
+}
+
+.legendForeign {
+  color: #a0a0a0;
+  font-weight: 400;
+}
+
+.legendFxGain {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.legendFxLoss {
+  color: #f87171;
+  font-weight: 600;
 }
 
 .chartMeta {

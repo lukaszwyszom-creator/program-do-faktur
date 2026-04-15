@@ -27,7 +27,7 @@ export default function AdvancedDashboard() {
       <KSeFSessionBar />
 
       {/* Statystyki */}
-      <DashboardSummary filters={filters} />
+      <DashboardSummary filters={filters} tab={tab} />
 
       {/* Filtry */}
       <Filters filters={filters} onChange={setFilters} onReset={resetFilters} />

@@ -14,3 +14,16 @@
 }
 .feedbackOk { color: var(--color-success); }
 .err        { color: var(--color-warning); cursor: help; }
+
+/* Na mobile przyciski pionowo */
+@media (max-width: 640px) {
+  .wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .wrap .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -3,10 +3,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routers.auth import router as auth_router
 from app.api.routers.contractors import router as contractors_router
+from app.api.routers.frontend import get_favicon_path
 from app.api.routers.frontend import router as frontend_router
 from app.api.routers.health import router as health_router
 from app.api.routers.invoices import router as invoices_router
@@ -58,6 +60,11 @@ def create_application() -> FastAPI:
     application.include_router(metrics_router)
     application.include_router(frontend_router)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
+
+    @application.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        return FileResponse(get_favicon_path(), media_type="image/x-icon")
+
     application.include_router(contractors_router, prefix=settings.api_v1_prefix)
     application.include_router(invoices_router, prefix=settings.api_v1_prefix)
     application.include_router(transmissions_router, prefix=settings.api_v1_prefix)

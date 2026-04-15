@@ -21,6 +21,7 @@ from app.persistence.repositories.contractor_override_repository import (
 )
 from app.persistence.repositories.contractor_repository import ContractorRepository
 from app.persistence.repositories.invoice_repository import InvoiceRepository
+from app.integrations.nbp.client import NbpRateClient, NbpRateError
 from app.services.audit_service import AuditService
 from app.services.invoice_number_policy import InvoiceNumberPolicy
 from app.services.stock_service import StockService
@@ -78,6 +79,18 @@ class InvoiceService:
         items = self._build_items(raw_items)
         total_net, total_vat, total_gross = self._calculate_totals(items)
 
+        currency = data.get("currency", "PLN")
+        exchange_rate: Decimal | None = data.get("exchange_rate")
+        exchange_rate_date: date | None = data.get("exchange_rate_date")
+
+        if currency != "PLN" and exchange_rate is None:
+            nbp_date = exchange_rate_date or (issue_date - date.resolution)
+            try:
+                exchange_rate = NbpRateClient().get_mid_rate(currency, nbp_date)
+                exchange_rate_date = nbp_date
+            except NbpRateError as exc:
+                logger.warning("Nie udało się pobrać kursu NBP dla %s: %s", currency, exc)
+
         now = datetime.now(UTC)
 
         invoice = Invoice(
@@ -88,7 +101,9 @@ class InvoiceService:
             issue_date=issue_date,
             sale_date=sale_date,
             delivery_date=delivery_date,
-            currency=data.get("currency", "PLN"),
+            currency=currency,
+            exchange_rate=exchange_rate,
+            exchange_rate_date=exchange_rate_date,
             seller_snapshot=seller_snapshot,
             buyer_snapshot=buyer_snapshot,
             items=items,

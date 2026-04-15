@@ -17,3 +17,27 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .row .form-group {
+    width: 100%;
+  }
+  /* selecty i inputy pełna szerokość */
+  .row select,
+  .row input[type="date"],
+  .row input[type="text"] {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}

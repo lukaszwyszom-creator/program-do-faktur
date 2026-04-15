@@ -205,3 +205,26 @@ a:hover { color: var(--color-gold-hover); }
 .alert-success{ background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success); }
 .alert-warning{ background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning); }
 .alert-info   { background: var(--color-info-bg);    color: var(--color-info);    border-color: var(--color-info); }
+
+/* ============================================================
+   MOBILE ADAPTATIONS (max-width: 640px)
+   ============================================================ */
+@media (max-width: 640px) {
+  /* Wyższy bazowy font dla czytelności */
+  html { font-size: 15px; }
+
+  /* Inputy i selecty — min 44px (Apple HIG) */
+  .input, .select, .textarea {
+    min-height: 44px;
+    font-size: 1rem; /* zapobiega auto-zoom na iOS */
+  }
+
+  /* Przyciski — większy obszar dotyku */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 36px; }
+
+  /* Safe area dla iPhone z notchem (X, 11, 12...) */
+  body {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

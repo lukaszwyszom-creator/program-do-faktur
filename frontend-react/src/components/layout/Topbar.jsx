@@ -4,12 +4,13 @@ import { useAuthStore } from '../../store/useAuthStore';
 import styles from './Topbar.module.css';
 
 const PAGE_TITLES = {
-  '/simple':   'Faktury — tryb prosty',
-  '/advanced': 'Dashboard — tryb rozszerzony',
-  '/payments': 'Płatności — import i rozliczenie',
+  '/simple':   'Faktury',
+  '/advanced': 'Dashboard',
+  '/payments': 'Płatności',
+  '/stock':    'Magazyn',
 };
 
-export default function Topbar() {
+export default function Topbar({ onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const mode = useAppStore((s) => s.mode);
@@ -25,6 +26,9 @@ export default function Topbar() {
   return (
     <header className={styles.topbar}>
       <div className={styles.left}>
+        <button className={styles.menuBtn} onClick={onMenuToggle} aria-label="Menu">
+          ☰
+        </button>
         <span className={styles.pageTitle}>
           {PAGE_TITLES[location.pathname] ?? 'System Fakturowania'}
         </span>
@@ -33,7 +37,9 @@ export default function Topbar() {
       <div className={styles.right}>
         <button className={`btn btn-secondary btn-sm ${styles.modeToggle}`} onClick={toggleMode}>
           <span className={styles.modeDot} data-mode={mode} />
-          {mode === 'simple' ? 'Przełącz na ADVANCED' : 'Przełącz na SIMPLE'}
+          <span className={styles.modeLabel}>
+            {mode === 'simple' ? 'ADVANCED' : 'SIMPLE'}
+          </span>
         </button>
 
         <div className={styles.userBadge}>

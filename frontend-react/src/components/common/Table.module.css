@@ -2,6 +2,7 @@
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
@@ -42,3 +43,43 @@
   padding: 36px 0 !important;
 }
 .loadingCell { display: flex; justify-content: center; padding: 36px 0 !important; }
+
+/* ---- Mobile: karty zamiast wierszy tabeli ---- */
+@media (max-width: 640px) {
+  .wrapper {
+    border: none;
+    background: transparent;
+  }
+  .table thead { display: none; }
+
+  .table tbody tr {
+    display: block;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 10px;
+    padding: 10px 12px;
+  }
+
+  .table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--color-border-soft);
+    font-size: 0.82rem;
+  }
+  .table tbody td:last-child { border-bottom: none; }
+
+  /* Etykieta kolumny z atrybutu data-label */
+  .table tbody td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.72rem;
+    color: var(--color-text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+}
+

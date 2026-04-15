@@ -38,3 +38,17 @@
   border-radius: var(--radius-lg);
   padding: 20px;
 }
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .formWrap {
+    padding: 12px;
+  }
+  .section {
+    padding: 12px;
+  }
+}

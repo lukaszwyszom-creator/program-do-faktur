@@ -35,9 +35,9 @@ export default function Table({ columns, rows = [], loading = false, emptyMsg = 
             </tr>
           ) : (
             rows.map((row, idx) => (
-              <tr key={row.id ?? idx}>
+              <tr key={row.id ?? idx} onClick={row._onClick} style={row._onClick ? { cursor: 'pointer' } : undefined}>
                 {columns.map((col) => (
-                  <td key={col.key}>
+                  <td key={col.key} data-label={col.label || undefined}>
                     {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
                   </td>
                 ))}

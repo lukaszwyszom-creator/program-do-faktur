@@ -59,3 +59,8 @@ def ui_manifest() -> FileResponse:
         _FRONTEND / "manifest.webmanifest",
         media_type="application/manifest+json",
     )
+
+
+# Favicon serwowany też poza prefixem /ui przez główny router aplikacji
+def get_favicon_path() -> Path:
+    return _FRONTEND / "favicon.ico"

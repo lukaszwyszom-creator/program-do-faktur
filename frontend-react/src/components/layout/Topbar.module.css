@@ -5,13 +5,31 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 16px;
   position: sticky;
   top: 0;
   z-index: 50;
 }
 
-.left { display: flex; align-items: center; }
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Przycisk hamburger — widoczny tylko na mobile */
+.menuBtn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  border-radius: var(--radius);
+}
+.menuBtn:hover { background: var(--color-surface-2); }
 
 .pageTitle {
   font-size: 0.95rem;
@@ -22,7 +40,7 @@
 .right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .modeToggle { display: flex; align-items: center; gap: 6px; }
@@ -32,6 +50,7 @@
   height: 8px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0;
 }
 .modeDot[data-mode="simple"]   { background: var(--color-gold); }
 .modeDot[data-mode="advanced"] { background: var(--color-info); }
@@ -47,3 +66,22 @@
 }
 .userIcon { font-size: 0.9rem; }
 .userName { font-size: 0.8rem; color: var(--color-text-2); }
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 10px;
+  }
+  .menuBtn {
+    display: block;
+  }
+  .modeLabel {
+    display: none;
+  }
+  .userName {
+    display: none;
+  }
+  .userBadge {
+    padding: 5px 8px;
+  }
+}

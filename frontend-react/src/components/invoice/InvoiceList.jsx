@@ -53,17 +53,35 @@ export default function InvoiceList({ filters = {}, direction = 'sale', limit, h
 
   const size = limit ?? 20;
 
+  // Aktualizacja pojedynczej faktury bez przeładowania listy (użyteczne po mark-ready
+  // gdy filtr statusu by ją wykluczył po przeładowaniu).
+  const updateItem = useCallback((updatedInvoice) => {
+    setData(prev => ({
+      ...prev,
+      items: prev.items.map(item => item.id === updatedInvoice.id ? updatedInvoice : item),
+    }));
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Wyznacz daty z filtra miesiąca (jeśli nie podano własnych dat)
+      let dateFrom = filters.issue_date_from || '';
+      let dateTo   = filters.issue_date_to   || '';
+      if (filters.month && !dateFrom && !dateTo) {
+        const [y, m] = filters.month.split('-').map(Number);
+        const last = new Date(y, m, 0).getDate();
+        dateFrom = `${filters.month}-01`;
+        dateTo   = `${filters.month}-${String(last).padStart(2, '0')}`;
+      }
       const params = {
         page,
         size,
         direction,
-        ...(filters.status             && { status: filters.status }),
-        ...(filters.issue_date_from    && { issue_date_from: filters.issue_date_from }),
-        ...(filters.issue_date_to      && { issue_date_to: filters.issue_date_to }),
-        ...(filters.contractor         && { number_filter: filters.contractor }),
+        ...(filters.status  && { status: filters.status }),
+        ...(dateFrom        && { issue_date_from: dateFrom }),
+        ...(dateTo          && { issue_date_to: dateTo }),
+        ...(filters.contractor && { number_filter: filters.contractor }),
       };
       const res = await invoicesApi.list(params);
       setData(res);
@@ -77,7 +95,7 @@ export default function InvoiceList({ filters = {}, direction = 'sale', limit, h
   // Eksponuj reload przez ref (opcjonalnie) — proste triggery
   const columns = COLUMNS.map((col) =>
     col.key === '_actions'
-      ? { ...col, render: (_, row) => <InvoiceActions invoice={row} onRefresh={load} /> }
+      ? { ...col, render: (_, row) => <InvoiceActions invoice={row} onRefresh={load} onUpdate={updateItem} /> }
       : col
   );
 

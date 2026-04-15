@@ -14,6 +14,28 @@
 
 .content {
   flex: 1;
-  padding: 24px;
+  padding: 20px;
   overflow-y: auto;
+}
+
+/* Overlay ciemny za sidebar na mobile */
+.overlay {
+  display: none;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .main {
+    margin-left: 0;
+  }
+  .content {
+    padding: 12px;
+  }
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 90;
+  }
 }

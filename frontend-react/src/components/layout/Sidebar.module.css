@@ -12,6 +12,18 @@
   z-index: 100;
 }
 
+/* ---- Mobile: schowany po lewej, wysuwa się po otwarciu ---- */
+@media (max-width: 640px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+  }
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+}
+
 .logo {
   display: flex;
   flex-direction: column;

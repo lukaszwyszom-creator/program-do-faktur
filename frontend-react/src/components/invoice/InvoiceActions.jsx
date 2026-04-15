@@ -8,19 +8,25 @@ import styles from './InvoiceActions.module.css';
  * @param {object}   transmission - opcjonalny obiekt ostatniej transmisji (dla retry)
  * @param {Function} onRefresh    - callback po akcji
  */
-export default function InvoiceActions({ invoice, transmission, onRefresh }) {
+export default function InvoiceActions({ invoice, transmission, onRefresh, onUpdate }) {
   const [busy, setBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('error');
 
-  const run = async (fn, successMsg) => {
+  const run = async (fn, successMsg, { updateInline = false } = {}) => {
     setBusy(true);
     setMsg('');
     try {
-      await fn();
+      const result = await fn();
       if (successMsg) { setMsg(successMsg); setMsgType('success'); }
-      onRefresh?.();
+      // Mark-ready: aktualizuj wiersz inline (nie przeładowuj listy) —
+      // przeładowanie z filtrem status=draft wykluczyłoby zatwierdzoną fakturę.
+      if (updateInline && onUpdate && result) {
+        onUpdate(result);
+      } else {
+        onRefresh?.();
+      }
     } catch (err) {
       const detail =
         err.response?.data?.error?.message ??
@@ -85,7 +91,7 @@ export default function InvoiceActions({ invoice, transmission, onRefresh }) {
         <button
           className="btn btn-secondary btn-sm"
           disabled={busy}
-          onClick={() => run(() => invoicesApi.markReady(invoice.id), 'Gotowa do wysyłki')}
+          onClick={() => run(() => invoicesApi.markReady(invoice.id), 'Gotowa do wysyłki', { updateInline: true })}
         >
           {busy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Zatwierdź'}
         </button>

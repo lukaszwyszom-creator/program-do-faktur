@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+function currentMonthValue() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 export const useAppStore = create(
   persist(
     (set) => ({
@@ -11,6 +18,7 @@ export const useAppStore = create(
 
       // Filtry wspólne
       filters: {
+        month: currentMonthValue(),
         status: '',
         issue_date_from: '',
         issue_date_to: '',
@@ -29,7 +37,7 @@ export const useAppStore = create(
 
       resetFilters: () =>
         set({
-          filters: { status: '', issue_date_from: '', issue_date_to: '', contractor: '' },
+          filters: { month: currentMonthValue(), status: '', issue_date_from: '', issue_date_to: '', contractor: '' },
         }),
 
       setDraftInvoice: (invoice) => set({ draftInvoice: invoice }),

@@ -13,7 +13,7 @@ const NAV_ITEMS_ADVANCED = [
   { to: '/stock',    label: 'Magazyn',   icon: '📦' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose }) {
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
   const logout = useAuthStore((s) => s.logout);
@@ -24,8 +24,13 @@ export default function Sidebar() {
     navigate('/login');
   };
 
+  const handleNav = () => {
+    // zamknij sidebar na mobile po kliknięciu w link
+    onClose?.();
+  };
+
   return (
-    <aside className={styles.sidebar}>
+    <aside className={`${styles.sidebar} ${open ? styles.sidebarOpen : ''}`}>
       <div className={styles.logo}>
         <img src={logo} alt="IFG" className={styles.logoImg} />
         <span className={styles.logoText}>Imperium Faktur G</span>
@@ -34,13 +39,13 @@ export default function Sidebar() {
       <div className={styles.modeToggle}>
         <button
           className={`${styles.modeBtn} ${mode === 'simple' ? styles.active : ''}`}
-          onClick={() => { setMode('simple'); navigate('/simple'); }}
+          onClick={() => { setMode('simple'); navigate('/simple'); handleNav(); }}
         >
           SIMPLE
         </button>
         <button
           className={`${styles.modeBtn} ${mode === 'advanced' ? styles.active : ''}`}
-          onClick={() => { setMode('advanced'); navigate('/advanced'); }}
+          onClick={() => { setMode('advanced'); navigate('/advanced'); handleNav(); }}
         >
           ADVANCED
         </button>
@@ -51,6 +56,7 @@ export default function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={handleNav}
             className={({ isActive }) =>
               `${styles.navItem} ${isActive ? styles.navActive : ''}`
             }

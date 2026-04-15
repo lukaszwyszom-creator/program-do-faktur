@@ -22,6 +22,8 @@ class InvoiceCreateRequest(BaseModel):
     sale_date: date
     delivery_date: date | None = None
     currency: str = "PLN"
+    exchange_rate: Decimal | None = None
+    exchange_rate_date: date | None = None
     direction: str = "sale"
     items: list[InvoiceItemInput]
     invoice_type: InvoiceType = InvoiceType.VAT
@@ -73,6 +75,8 @@ class InvoiceResponse(BaseModel):
     total_net: Decimal
     total_vat: Decimal
     total_gross: Decimal
+    exchange_rate: Decimal | None = None
+    exchange_rate_date: date | None = None
     payment_status: str = "unpaid"
     invoice_type: str = "VAT"
     direction: str = "sale"
@@ -100,6 +104,8 @@ class InvoiceResponse(BaseModel):
             total_net=invoice.total_net,
             total_vat=invoice.total_vat,
             total_gross=invoice.total_gross,
+            exchange_rate=invoice.exchange_rate,
+            exchange_rate_date=invoice.exchange_rate_date,
             payment_status=invoice.payment_status,
             invoice_type=invoice.invoice_type.value,
             direction=invoice.direction,
