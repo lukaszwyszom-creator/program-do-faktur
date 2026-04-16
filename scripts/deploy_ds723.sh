@@ -40,11 +40,32 @@ fi
 COMMIT=$(git rev-parse --short HEAD)
 info "Deploying commit: $COMMIT"
 
+# ── Buduj frontend lokalnie na Mac mini ───────────────────────
+info "Budowanie obrazu frontendu (lokalnie — Mac mini)..."
+docker build -f docker/Dockerfile.frontend -t ifg-frontend:latest . \
+  || error "Błąd budowania frontendu"
+
+FRONTEND_TAR="/tmp/ifg-frontend-${COMMIT}.tar.gz"
+info "Eksportuję obraz → $FRONTEND_TAR"
+docker save ifg-frontend:latest | gzip > "$FRONTEND_TAR"
+
+info "Przesyłam obraz na $DS_HOST (SCP)..."
+scp -q -P "${DS_PORT}" "$FRONTEND_TAR" "${DS_USER}@${DS_HOST}:/tmp/ifg-frontend.tar.gz"
+rm -f "$FRONTEND_TAR"
+info "Obraz frontendu przesłany ✓"
+
 # ── Wyślij na DS723+ przez SSH ────────────────────────────────
 info "Łączę z $DS_USER@$DS_HOST..."
 
 ssh -p "${DS_PORT}" "${DS_USER}@${DS_HOST}" bash <<REMOTE
 set -euo pipefail
+
+# Docker na Synology nie jest w domyślnym PATH
+export PATH="/var/packages/ContainerManager/target/usr/bin:$PATH"
+
+echo "→ Ładuję obraz frontendu"
+docker load < /tmp/ifg-frontend.tar.gz
+rm -f /tmp/ifg-frontend.tar.gz
 
 echo "→ Przechodzę do $REMOTE_DIR"
 cd "$REMOTE_DIR"
