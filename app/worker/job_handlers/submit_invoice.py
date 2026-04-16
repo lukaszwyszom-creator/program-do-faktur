@@ -81,13 +81,19 @@ class SubmitInvoiceJobHandler:
                     "Brak NIP sprzedawcy w seller_snapshot — nie można wybrać sesji KSeF."
                 )
 
-            session_token = self._ksef_session_service.get_session_token(seller_nip)
+            ctx = self._ksef_session_service.get_session_context(seller_nip)
             xml_bytes = KSeFMapper.invoice_to_xml(invoice)
 
             # Idempotency key oparty o C14N hash XML — deterministyczny przy retry
             idempotency_key = KSeFMapper.xml_content_hash(xml_bytes)
 
-            send_result = self._ksef_client.send_invoice(session_token, xml_bytes)
+            send_result = self._ksef_client.send_invoice(
+                ctx.access_token,
+                ctx.session_reference,
+                ctx.symmetric_key,
+                ctx.initialization_vector,
+                xml_bytes,
+            )
 
             transmission.status = TransmissionStatus.SUBMITTED
             transmission.external_reference = send_result.reference_number

@@ -65,9 +65,9 @@ class PollKSeFStatusJobHandler:
             # Pobierz NIP sprzedawcy z faktury powiązanej z transmisją
             invoice = self._invoice_repo.get_by_id(transmission.invoice_id)
             seller_nip = (invoice.seller_snapshot if invoice else {}).get("nip", "") if invoice else ""
-            session_token = self._ksef_session_service.get_session_token(seller_nip) if seller_nip else self._ksef_session_service.get_session_token("")
+            ctx = self._ksef_session_service.get_session_context(seller_nip)
             status_result = self._ksef_client.get_invoice_status(
-                session_token, reference_number
+                ctx.access_token, ctx.session_reference, reference_number
             )
         except KSeFClientError as exc:
             logger.warning(
@@ -109,7 +109,7 @@ class PollKSeFStatusJobHandler:
 
             # Pobierz UPO — awaria nie cofa sukcesu faktury ani numeru KSeF
             self._fetch_and_save_upo(
-                transmission, status_result.ksef_reference_number, session_token
+                transmission, status_result.ksef_reference_number, status_result.upo_url
             )
 
         elif code in _PERMANENT_ERROR_CODES:
@@ -155,7 +155,7 @@ class PollKSeFStatusJobHandler:
         self,
         transmission,
         ksef_reference_number: str | None,
-        session_token: str,
+        upo_url: str | None,
     ) -> None:
         """Pobiera UPO z KSeF i zapisuje w transmisji.
 
@@ -170,8 +170,16 @@ class PollKSeFStatusJobHandler:
             transmission.upo_status = "failed"
             return
 
+        if not upo_url:
+            logger.warning(
+                "poll_ksef_status: brak URL do UPO dla %s — pomijam.",
+                ksef_reference_number,
+            )
+            transmission.upo_status = "failed"
+            return
+
         try:
-            upo_bytes = self._ksef_client.get_upo(session_token, ksef_reference_number)
+            upo_bytes = self._ksef_client.get_upo(upo_url)
         except Exception as exc:
             logger.warning(
                 "poll_ksef_status: blad pobierania UPO dla %s: %s",

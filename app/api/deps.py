@@ -125,6 +125,11 @@ def get_ksef_session_service(
             environment=settings.ksef_environment,
             timeout_seconds=settings.ksef_timeout_seconds,
         ),
+        ksef_client=KSeFClient(
+            environment=settings.ksef_environment,
+            timeout_seconds=settings.ksef_timeout_seconds,
+            retry_config=RetryConfig(),
+        ),
         audit_service=audit_service,
     )
 

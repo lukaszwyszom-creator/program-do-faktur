@@ -79,6 +79,7 @@ def _process_batch() -> int:
                 environment=settings.ksef_environment,
                 timeout_seconds=settings.ksef_timeout_seconds,
             ),
+            ksef_client=ksef_client,
             audit_service=audit_service,
         )
         handlers = _build_handlers(session, ksef_client, ksef_session_service)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -9,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import AppError, ConflictError, NotFoundError
-from app.integrations.ksef.auth import KSeFAuthProvider
+from app.core.exceptions import AppError, ConflictError, ExternalServiceError, NotFoundError
+from app.integrations.ksef.auth import KSeFAuthError, KSeFAuthProvider
+from app.integrations.ksef.client import KSeFClient, KSeFClientError
 from app.persistence.models.ksef_session import KSeFSessionORM
 from app.services.audit_service import AuditService
 
@@ -23,6 +26,23 @@ SESSION_FAILED = "failed"
 
 # Margines przed wygaśnięciem — token uznajemy za ważny jeśli trwa > MARGIN
 _TOKEN_CACHE_MARGIN = timedelta(seconds=30)
+
+# Klucze w token_metadata_json
+_KEY_ACCESS_TOKEN = "access_token"
+_KEY_REFRESH_TOKEN = "refresh_token"
+_KEY_REFRESH_VALID = "refresh_valid_until"
+_KEY_SYMMETRIC_KEY = "symmetric_key"
+_KEY_IV = "initialization_vector"
+
+
+@dataclass
+class KSeFSessionContext:
+    """Kontekst potrzebny do operacji na fakturach w danej sesji KSeF."""
+
+    access_token: str
+    session_reference: str
+    symmetric_key: bytes
+    initialization_vector: bytes
 
 
 class _TokenCacheEntry:
@@ -43,10 +63,12 @@ class KSeFSessionService:
         self,
         session: Session,
         auth_provider: KSeFAuthProvider,
+        ksef_client: KSeFClient,
         audit_service: AuditService,
     ) -> None:
         self.session = session
         self.auth_provider = auth_provider
+        self.ksef_client = ksef_client
         self.audit_service = audit_service
         # cache tokenów — klucz: nip (str), wartość: _TokenCacheEntry
         self._token_cache: dict[str, _TokenCacheEntry] = {}
@@ -70,21 +92,39 @@ class KSeFSessionService:
                 f"{active.session_reference}."
             )
 
-        challenge_resp = self.auth_provider.get_challenge(nip)
-        ksef_session = self.auth_provider.init_session(
-            nip, challenge_resp["challenge"], auth_token
-        )
+        # 1. Uwierzytelnienie → access token + refresh token
+        try:
+            ksef_session = self.auth_provider.get_tokens(nip, auth_token)
+        except KSeFAuthError as exc:
+            raise ExternalServiceError(f"Błąd uwierzytelnienia KSeF: {exc}") from exc
+
+        # 2. Otwarcie sesji interaktywnej → session reference + klucz symetryczny
+        try:
+            online_session = self.ksef_client.open_online_session(ksef_session.access_token)
+        except KSeFClientError as exc:
+            raise ExternalServiceError(f"Błąd otwarcia sesji KSeF: {exc}") from exc
 
         now = datetime.now(UTC)
+        expires_at = ksef_session.access_valid_until
+
         orm = KSeFSessionORM(
             id=uuid4(),
             nip=nip,
             environment=self.auth_provider.environment,
             auth_method="token",
-            session_reference=ksef_session.session_reference,
-            token_metadata_json={"session_token": ksef_session.session_token},
+            session_reference=online_session.session_reference,
+            token_metadata_json={
+                _KEY_ACCESS_TOKEN: ksef_session.access_token,
+                _KEY_REFRESH_TOKEN: ksef_session.refresh_token,
+                _KEY_REFRESH_VALID: (
+                    ksef_session.refresh_valid_until.isoformat()
+                    if ksef_session.refresh_valid_until else None
+                ),
+                _KEY_SYMMETRIC_KEY: base64.b64encode(online_session.symmetric_key).decode("ascii"),
+                _KEY_IV: base64.b64encode(online_session.initialization_vector).decode("ascii"),
+            },
             status=SESSION_ACTIVE,
-            expires_at=ksef_session.expires_at,
+            expires_at=expires_at,
             created_at=now,
             updated_at=now,
         )
@@ -119,36 +159,50 @@ class KSeFSessionService:
 
         return orm
 
-    def get_session_token(self, nip: str) -> str:
-        """Zwraca token sesji dla danego NIP.
+    def get_session_context(self, nip: str) -> KSeFSessionContext:
+        """Zwraca pełny kontekst sesji potrzebny do wysyłki faktur.
 
-        Wynik jest cachowany w pamięci procesu (TTL = czas ważności tokenu
-        minus _TOKEN_CACHE_MARGIN). Cache jest per-NIP i thread-safe.
+        Wynik access tokena jest cachowany (TTL = czas ważności − margines).
         """
         with self._cache_lock:
             entry = self._token_cache.get(nip)
             if entry is not None and entry.is_valid():
-                return entry.token
+                # Cache ma tylko access_token — pełny kontekst musi być z DB
+                pass
 
         orm = self.get_active_session(nip)
         metadata = orm.token_metadata_json or {}
-        token = metadata.get("session_token")
-        if not token:
+        access_token = metadata.get(_KEY_ACCESS_TOKEN)
+        symmetric_key_b64 = metadata.get(_KEY_SYMMETRIC_KEY)
+        iv_b64 = metadata.get(_KEY_IV)
+
+        if not access_token or not symmetric_key_b64 or not iv_b64:
             raise AppError(
-                f"Brak tokenu sesji KSeF dla NIP {nip} — zainicjuj sesję ponownie."
+                f"Niekompletny kontekst sesji KSeF dla NIP {nip} — "
+                "zainicjuj sesję ponownie."
             )
 
         with self._cache_lock:
-            self._token_cache[nip] = _TokenCacheEntry(token, orm.expires_at)
+            self._token_cache[nip] = _TokenCacheEntry(access_token, orm.expires_at)
 
-        return token
+        return KSeFSessionContext(
+            access_token=access_token,
+            session_reference=orm.session_reference or "",
+            symmetric_key=base64.b64decode(symmetric_key_b64),
+            initialization_vector=base64.b64decode(iv_b64),
+        )
+
+    def get_session_token(self, nip: str) -> str:
+        """Zwraca access token dla danego NIP (alias dla wstecznej zgodności)."""
+        return self.get_session_context(nip).access_token
 
     def close_session(
         self, nip: str, actor_user_id: UUID | None = None
     ) -> KSeFSessionORM:
         orm = self.get_active_session(nip)
-        token = (orm.token_metadata_json or {}).get("session_token")
-        self.auth_provider.terminate_session(token)
+        metadata = orm.token_metadata_json or {}
+        access_token = metadata.get(_KEY_ACCESS_TOKEN, "")
+        self.ksef_client.close_online_session(access_token, orm.session_reference or "")
 
         now = datetime.now(UTC)
         orm.status = SESSION_TERMINATED
@@ -168,11 +222,7 @@ class KSeFSessionService:
         return orm
 
     def mark_session_expired(self, nip: str) -> None:
-        """Oznacza aktywną sesję KSeF dla danego NIP jako wygasłą.
-
-        Wywoływana przez worker gdy KSeF zwróci 401/403 w trakcie wysyłki.
-        Nie rzuca wyjątku jeśli aktywna sesja nie istnieje.
-        """
+        """Oznacza aktywną sesję KSeF dla danego NIP jako wygasłą."""
         orm = self._get_active_db_session(nip)
         if orm is not None:
             orm.status = SESSION_EXPIRED
