@@ -50,7 +50,7 @@ info "Eksportuję obraz → $FRONTEND_TAR"
 docker save ifg-frontend:latest | gzip > "$FRONTEND_TAR"
 
 info "Przesyłam obraz na $DS_HOST (SCP)..."
-scp -q -P "${DS_PORT}" "$FRONTEND_TAR" "${DS_USER}@${DS_HOST}:/tmp/ifg-frontend.tar.gz"
+scp -O -q -P "${DS_PORT}" "$FRONTEND_TAR" "${DS_USER}@${DS_HOST}:/tmp/ifg-frontend.tar.gz"
 rm -f "$FRONTEND_TAR"
 info "Obraz frontendu przesłany ✓"
 
