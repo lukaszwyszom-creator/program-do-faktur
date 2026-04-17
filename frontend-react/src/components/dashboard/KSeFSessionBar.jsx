@@ -81,11 +81,18 @@ export default function KSeFSessionBar() {
       setSellerNip(nip);
       setSuccessMsg('Sesja KSeF otwarta pomyślnie');
     } catch (err) {
-      const msg =
-        err.response?.data?.error?.message ??
-        err.response?.data?.detail ??
-        'Błąd otwierania sesji';
-      setError(msg);
+      if (err.response?.status === 409) {
+        // Sesja już istnieje — załaduj ją i daj użytkownikowi możliwość zamknięcia
+        setSellerNip(nip);
+        await checkSession(nip);
+        setError('Sesja KSeF jest już aktywna. Możesz ją zamknąć poniżej.');
+      } else {
+        const msg =
+          err.response?.data?.error?.message ??
+          err.response?.data?.detail ??
+          'Błąd otwierania sesji';
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
