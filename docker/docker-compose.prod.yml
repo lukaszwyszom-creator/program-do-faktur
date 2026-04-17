@@ -10,6 +10,7 @@
 
 services:
   api:
+    image: ifg-api:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -35,6 +36,7 @@ services:
       - ifg_prod
 
   worker:
+    image: ifg-api:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
