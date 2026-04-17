@@ -16,6 +16,7 @@ export default function KSeFSessionBar() {
   const [session, setSession] = useState(null);  // KSeFSessionResponse | null
   const [busy, setBusy] = useState(false);
   const [checkLoading, setCheckLoading] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -95,9 +96,126 @@ export default function KSeFSessionBar() {
     clearMsgs();
     setBusy(true);
     try {
-      await ksefApi.closeSession(session.id);
+      await ksefApi.closeSession(session.nip);
       setSession(null);
       setSuccessMsg('Sesja KSeF zamknięta');
+    } catch (err) {
+      const msg =
+        err.response?.data?.error?.message ??
+        err.response?.data?.detail ??
+        'Błąd zamykania sesji';
+      setError(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSyncPurchase = async () => {
+    if (!session) return;
+    clearMsgs();
+    setSyncBusy(true);
+    try {
+      // Pobierz faktury z ostatnich 30 dni
+      const dateTo = new Date();
+      const dateFrom = new Date();
+      dateFrom.setDate(dateFrom.getDate() - 30);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+
+      const result = await ksefApi.syncPurchaseInvoices(session.nip, fmt(dateFrom), fmt(dateTo));
+      setSuccessMsg(`Pobrano ${result.saved} nowych faktur zakupowych`);
+      if (result.saved > 0) {
+        // Odśwież listę faktur
+        window.dispatchEvent(new CustomEvent('ksef:invoices-synced'));
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.error?.message ??
+        err.response?.data?.detail ??
+        'Błąd synchronizacji faktur';
+      setError(msg);
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const isActive = session?.status === 'active';
+  const nipValid = nip.length === 10;
+
+  return (
+    <div className={styles.bar}>
+      <div className={styles.left}>
+        <span className={styles.label}>Sesja KSeF</span>
+
+        {isActive ? (
+          <span className={styles.sessionInfo}>
+            <span className={styles.dot} />
+            Aktywna · NIP {session.nip}
+            {session.session_reference && (
+              <span className={styles.ref} title={session.session_reference}>
+                · ref: {session.session_reference.slice(0, 12)}…
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className={styles.noSession}>Brak aktywnej sesji</span>
+        )}
+      </div>
+
+      <div className={styles.right}>
+        {!isActive && (
+          <>
+            <input
+              className={`input ${styles.nipInput}`}
+              type="text"
+              placeholder="NIP sprzedawcy"
+              maxLength={10}
+              value={nip}
+              onChange={(e) => handleNipChange(e.target.value)}
+            />
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={!nipValid || checkLoading}
+              onClick={handleCheck}
+            >
+              {checkLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Sprawdź'}
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!nipValid || busy}
+              onClick={handleOpen}
+            >
+              {busy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Otwórz sesję'}
+            </button>
+          </>
+        )}
+
+        {isActive && (
+          <>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={syncBusy}
+              onClick={handleSyncPurchase}
+              title="Pobierz faktury zakupowe z KSeF (ostatnie 30 dni)"
+            >
+              {syncBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Pobierz zakupowe'}
+            </button>
+            <button
+              className="btn btn-danger btn-sm"
+              disabled={busy}
+              onClick={handleClose}
+            >
+              {busy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Zamknij sesję'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {error      && <div className={styles.alertRow}><div className="alert alert-error">{error}</div></div>}
+      {successMsg && <div className={styles.alertRow}><div className="alert alert-success">{successMsg}</div></div>}
+    </div>
+  );
+}
+
     } catch (err) {
       const msg =
         err.response?.data?.error?.message ??

@@ -92,6 +92,14 @@ export default function InvoiceList({ filters = {}, direction = 'sale', limit, h
 
   useEffect(() => { load(); }, [load]);
 
+  // Odśwież listę zakupowych po synchronizacji z KSeF
+  useEffect(() => {
+    if (direction !== 'purchase') return;
+    const handler = () => load();
+    window.addEventListener('ksef:invoices-synced', handler);
+    return () => window.removeEventListener('ksef:invoices-synced', handler);
+  }, [direction, load]);
+
   // Eksponuj reload przez ref (opcjonalnie) — proste triggery
   const columns = COLUMNS.map((col) =>
     col.key === '_actions'

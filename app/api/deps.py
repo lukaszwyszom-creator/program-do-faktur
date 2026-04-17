@@ -131,6 +131,7 @@ def get_ksef_session_service(
             retry_config=RetryConfig(),
         ),
         audit_service=audit_service,
+        invoice_repository=InvoiceRepository(session),
     )
 
 

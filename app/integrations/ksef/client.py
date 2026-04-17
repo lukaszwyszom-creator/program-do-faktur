@@ -81,6 +81,14 @@ class InvoiceStatusResult:
 
 
 @dataclass
+class ReceivedInvoiceResult:
+    """Faktura odebrana z KSeF — numer referencyjny i zdekryptowany XML FA(3)."""
+
+    ksef_reference_number: str
+    xml_bytes: bytes
+
+
+@dataclass
 class RetryConfig:
     max_retries: int = 3
     backoff_base: float = 1.0
@@ -255,6 +263,92 @@ class KSeFClient:
             pass
         return False
 
+    def query_received_invoices(
+        self,
+        access_token: str,
+        session_reference: str,
+        symmetric_key: bytes,
+        iv: bytes,
+        invoicing_date_from: str,
+        invoicing_date_to: str,
+    ) -> list[ReceivedInvoiceResult]:
+        """Pobiera faktury zakupowe (odebrane) z KSeF za podany zakres dat.
+
+        Flow:
+        1. POST /invoices/query → queryReferenceNumber (202)
+        2. Poll GET /invoices/query/{queryRef} aż processingCode == 200
+        3. Dla każdego ksefReferenceNumber: GET /invoices/{ref} → decrypt AES-256-CBC
+        Zwraca listę ReceivedInvoiceResult (ksef_reference_number + XML bytes).
+        """
+        # 1. Zgłoś zapytanie
+        resp = self._request_with_retry(
+            method="POST",
+            path="/invoices/query",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={
+                "queryCriteria": {
+                    "invoiceType": "received",
+                    "subjectType": "subject2",
+                    "invoicingDateFrom": invoicing_date_from,
+                    "invoicingDateTo": invoicing_date_to,
+                },
+            },
+        )
+        query_ref = resp.json()["referenceNumber"]
+        logger.info("KSeF query received invoices: queryRef=%s", query_ref)
+
+        # 2. Polling — max 60s co 3s
+        invoice_refs: list[str] = []
+        for _attempt in range(20):
+            time.sleep(3)
+            try:
+                poll_resp = self._request_with_retry(
+                    method="GET",
+                    path=f"/invoices/query/{query_ref}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+            except KSeFClientError as exc:
+                if exc.status_code == 202:
+                    # Jeszcze przetwarza — czekamy
+                    continue
+                raise
+            data = poll_resp.json()
+            code = data.get("processingCode", 0)
+            if code == 200:
+                invoice_refs = [
+                    inv["ksefReferenceNumber"]
+                    for inv in data.get("invoiceList", [])
+                ]
+                logger.info(
+                    "KSeF query done: queryRef=%s, count=%d", query_ref, len(invoice_refs)
+                )
+                break
+            if code >= 400:
+                raise KSeFClientError(
+                    f"KSeF query zakończone błędem: code={code}",
+                    status_code=code,
+                )
+
+        # 3. Pobierz i odszyfruj każdą fakturę
+        results: list[ReceivedInvoiceResult] = []
+        for ref in invoice_refs:
+            try:
+                inv_resp = self._request_with_retry(
+                    method="GET",
+                    path=f"/invoices/{ref}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                enc_content = base64.b64decode(inv_resp.json()["encryptedInvoiceContent"])
+                xml_bytes = _aes_cbc_decrypt(enc_content, symmetric_key, iv)
+                results.append(ReceivedInvoiceResult(
+                    ksef_reference_number=ref,
+                    xml_bytes=xml_bytes,
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("KSeF: błąd pobierania faktury %s: %s", ref, exc)
+
+        return results
+
     def get_upo(self, upo_url: str) -> bytes:
         """Pobiera UPO z URL zwróconego w statusie faktury (bez uwierzytelnienia)."""
         try:
@@ -403,3 +497,12 @@ def _aes_cbc_encrypt(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
     encryptor = cipher.encryptor()
     return encryptor.update(padded) + encryptor.finalize()
+
+
+def _aes_cbc_decrypt(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
+    """Odszyfrowuje dane AES-256-CBC z dopełnieniem PKCS#7."""
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(ciphertext) + decryptor.finalize()
+    unpadder = PKCS7(128).unpadder()
+    return unpadder.update(padded) + unpadder.finalize()

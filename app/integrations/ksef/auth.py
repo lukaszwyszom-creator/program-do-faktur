@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -169,30 +170,70 @@ class KSeFAuthProvider:
             raise KSeFAuthError(f"KSeF connection error: {exc}") from exc
 
     def _redeem_tokens(self, authentication_token: str) -> KSeFSession:
-        """POST /auth/token/redeem — wymienia authenticationToken na access/refresh."""
-        url = f"{self._base_url}/auth/token/redeem"
-        try:
-            resp = httpx.post(
-                url,
-                headers={"Authorization": f"Bearer {authentication_token}"},
-                timeout=self._timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except httpx.HTTPStatusError as exc:
-            raise KSeFAuthError(
-                f"KSeF token redeem error ({exc.response.status_code}): "
-                f"{exc.response.text[:300]}"
-            ) from exc
-        except httpx.RequestError as exc:
-            raise KSeFAuthError(f"KSeF connection error: {exc}") from exc
+        """POST /auth/token/redeem — wymienia authenticationToken na access/refresh.
 
-        return KSeFSession(
-            access_token=data["accessToken"]["token"],
-            refresh_token=data["refreshToken"]["token"],
-            access_valid_until=_parse_dt(data["accessToken"].get("validUntil")),
-            refresh_valid_until=_parse_dt(data["refreshToken"].get("validUntil")),
-        )
+        KSeF 2.0 przetwarza uwierzytelnienie asynchronicznie. Jeśli serwer zwróci
+        400 ze statusem 450 (SENT — w toku), ponawiamy żądanie z wykładniczym
+        opóźnieniem przez max 30 sekund.
+        """
+        url = f"{self._base_url}/auth/token/redeem"
+        max_wait_seconds = 30.0
+        delay = 0.5
+        elapsed = 0.0
+
+        while True:
+            try:
+                resp = httpx.post(
+                    url,
+                    headers={"Authorization": f"Bearer {authentication_token}"},
+                    timeout=self._timeout,
+                )
+            except httpx.RequestError as exc:
+                raise KSeFAuthError(f"KSeF connection error: {exc}") from exc
+
+            # KSeF przetwarza auth asynchronicznie — status 450 = SENT (w toku)
+            if resp.status_code == 400 and elapsed < max_wait_seconds:
+                try:
+                    detail_list = (
+                        resp.json()
+                        .get("exception", {})
+                        .get("exceptionDetailList", [])
+                    )
+                    still_processing = any(
+                        d.get("exceptionCode") == 21301
+                        and any("450" in str(x) for x in d.get("details", []))
+                        for d in detail_list
+                    )
+                except Exception:
+                    still_processing = False
+
+                if still_processing:
+                    logger.info(
+                        "KSeF auth w toku (status 450), ponowna próba za %.1fs "
+                        "(elapsed=%.1fs)",
+                        delay,
+                        elapsed,
+                    )
+                    time.sleep(delay)
+                    elapsed += delay
+                    delay = min(delay * 1.5, 5.0)
+                    continue
+
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise KSeFAuthError(
+                    f"KSeF token redeem error ({exc.response.status_code}): "
+                    f"{exc.response.text[:300]}"
+                ) from exc
+
+            data = resp.json()
+            return KSeFSession(
+                access_token=data["accessToken"]["token"],
+                refresh_token=data["refreshToken"]["token"],
+                access_valid_until=_parse_dt(data["accessToken"].get("validUntil")),
+                refresh_valid_until=_parse_dt(data["refreshToken"].get("validUntil")),
+            )
 
 
 def _parse_dt(value: str | None) -> datetime | None:

@@ -98,6 +98,14 @@ class InvoiceRepository:
         )
         return bool(self.session.execute(stmt).scalar())
 
+    def exists_by_ksef_number(self, ksef_reference_number: str) -> bool:
+        stmt = select(
+            select(InvoiceORM)
+            .where(InvoiceORM.ksef_reference_number == ksef_reference_number)
+            .exists()
+        )
+        return bool(self.session.execute(stmt).scalar())
+
     def get_next_sequence_number(self, year: int, month: int) -> int:
         """Zlicza faktury w danym miesiącu i zwraca następny numer sekwencyjny."""
         from datetime import date as _date

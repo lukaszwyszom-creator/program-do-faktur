@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { ksefApi } from '../../api/ksef';
 import styles from './Sidebar.module.css';
 import logo from '../../assets/logo-ifg.png';
 
@@ -16,10 +17,18 @@ const NAV_ITEMS_ADVANCED = [
 export default function Sidebar({ open = false, onClose }) {
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
+  const sellerNip = useAppStore((s) => s.sellerNip);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (sellerNip) {
+      try {
+        await ksefApi.closeSession(sellerNip);
+      } catch {
+        // Zamknięcie sesji nie powiodło się lub sesja już nieaktywna — ignorujemy
+      }
+    }
     logout();
     navigate('/login');
   };

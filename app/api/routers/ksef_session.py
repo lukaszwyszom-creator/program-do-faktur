@@ -1,9 +1,11 @@
 """Endpointy zarządzania sesją KSeF."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.api.deps import get_current_user, get_ksef_session_service
 from app.core.security import AuthenticatedUser
@@ -116,3 +118,41 @@ def get_session_by_id(
     """Pobiera sesję KSeF po ID."""
     orm = ksef_session_service.get_session_by_id(session_id)
     return KSeFSessionResponse.model_validate(orm)
+
+
+# ---------------------------------------------------------------------------
+# SYNC PURCHASE INVOICES
+# ---------------------------------------------------------------------------
+
+class SyncPurchaseRequest(BaseModel):
+    nip: str
+    date_from: date
+    date_to: date
+
+
+class SyncPurchaseResponse(BaseModel):
+    saved: int
+
+
+@router_sessions.post(
+    "/sync-purchase",
+    response_model=SyncPurchaseResponse,
+    summary="Pobierz faktury zakupowe z KSeF",
+    description=(
+        "Pobiera faktury zakupowe (odebrane) z KSeF za podany zakres dat "
+        "i zapisuje nowe do bazy. Wymaga aktywnej sesji KSeF dla podanego NIP."
+    ),
+)
+def sync_purchase_invoices(
+    body: SyncPurchaseRequest,
+    ksef_session_service: Annotated[KSeFSessionService, Depends(get_ksef_session_service)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+) -> SyncPurchaseResponse:
+    """POST /api/v1/ksef-sessions/sync-purchase — synchronizuj faktury zakupowe."""
+    saved = ksef_session_service.sync_received_invoices(
+        nip=body.nip,
+        date_from=body.date_from,
+        date_to=body.date_to,
+        actor_user_id=current_user.user_id,
+    )
+    return SyncPurchaseResponse(saved=saved)
