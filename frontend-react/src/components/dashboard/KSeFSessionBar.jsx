@@ -85,7 +85,10 @@ export default function KSeFSessionBar() {
         // Sesja już istnieje — załaduj ją i daj użytkownikowi możliwość zamknięcia
         setSellerNip(nip);
         await checkSession(nip);
-        setError('Sesja KSeF jest już aktywna. Możesz ją zamknąć poniżej.');
+        // Jeśli checkSession nie znalazło sesji (edge case) — ustaw syntetyczną
+        setSession((prev) => prev ?? { nip, status: 'active', session_reference: null });
+        // checkSession woła clearMsgs() — ustawiamy error po nim
+        setError('Sesja KSeF jest już aktywna. Możesz ją zamknąć lub pobrać faktury.');
       } else {
         const msg =
           err.response?.data?.error?.message ??
