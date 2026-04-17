@@ -62,9 +62,10 @@ set -euo pipefail
 
 # Docker na Synology nie jest w domyślnym PATH
 export PATH="/var/packages/ContainerManager/target/usr/bin:$PATH"
+export SUDO_ASKPASS=/bin/false
 
 echo "→ Ładuję obraz frontendu"
-docker load < /tmp/ifg-frontend.tar.gz
+echo 'Ikonasynology1971!' | sudo -S docker load < /tmp/ifg-frontend.tar.gz
 rm -f /tmp/ifg-frontend.tar.gz
 
 echo "→ Przechodzę do $REMOTE_DIR"
@@ -74,16 +75,16 @@ echo "→ git pull origin main"
 git pull origin main
 
 echo "→ Buduję obrazy Docker"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache
+echo 'Ikonasynology1971!' | sudo -S docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache
 
 echo "→ Restartuję serwisy"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
+echo 'Ikonasynology1971!' | sudo -S docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
 
 echo "→ Migracje bazy danych"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api alembic upgrade head
+echo 'Ikonasynology1971!' | sudo -S docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api alembic upgrade head
 
 echo "→ Status"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
+echo 'Ikonasynology1971!' | sudo -S docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 REMOTE
 
 info "Deploy zakończony pomyślnie ✓  (commit: $COMMIT)"
