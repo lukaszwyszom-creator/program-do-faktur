@@ -77,6 +77,7 @@ class InvoiceService:
         buyer_snapshot = self._resolve_buyer_snapshot(buyer_id)
         seller_snapshot = self._build_seller_snapshot()
         items = self._build_items(raw_items)
+        self._validate_stock_products(items)
         total_net, total_vat, total_gross = self._calculate_totals(items)
 
         currency = data.get("currency", "PLN")
@@ -135,9 +136,13 @@ class InvoiceService:
                 invoice_id=saved.id,
                 direction=saved.direction,
                 items=[
-                    {"product_id": item.product_id, "quantity": item.quantity}
+                    {
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "invoice_item_id": item.id,
+                    }
                     for item in saved.items
-                    if hasattr(item, "product_id")
+                    if item.product_id is not None
                 ],
             )
 
@@ -303,6 +308,12 @@ class InvoiceService:
                     f"Pozycja {idx + 1}: stawka VAT musi być w zakresie 0–100."
                 )
 
+            product_id = raw.get("product_id")
+            if product_id is not None and product_id != "":
+                product_id = UUID(str(product_id))
+            else:
+                product_id = None
+
             net_total = (quantity * unit_price_net).quantize(
                 _TWO_PLACES, rounding=ROUND_HALF_UP
             )
@@ -313,6 +324,7 @@ class InvoiceService:
 
             items.append(
                 InvoiceItem(
+                    id=uuid4(),
                     name=name,
                     quantity=quantity,
                     unit=raw.get("unit", "szt."),
@@ -322,10 +334,28 @@ class InvoiceService:
                     vat_total=vat_total,
                     gross_total=gross_total,
                     sort_order=idx + 1,
+                    product_id=product_id,
                 )
             )
 
         return items
+
+    def _validate_stock_products(self, items: list[InvoiceItem]) -> None:
+        """product_id musi wskazywać istniejący produkt magazynowy."""
+        if self.stock_service is None:
+            for item in items:
+                if item.product_id is not None:
+                    raise InvalidInvoiceError(
+                        "Pozycja z product_id wymaga aktywnego modułu magazynu."
+                    )
+            return
+        for idx, item in enumerate(items):
+            if item.product_id is None:
+                continue
+            if self.stock_service.repo.get_product(item.product_id) is None:
+                raise InvalidInvoiceError(
+                    f"Pozycja {idx + 1}: produkt {item.product_id} nie istnieje w magazynie."
+                )
 
     @staticmethod
     def _calculate_totals(

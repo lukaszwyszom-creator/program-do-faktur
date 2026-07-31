@@ -68,3 +68,4 @@ class StockMovement:
     invoice_id: UUID | None
     note: str | None
     created_at: datetime
+    invoice_item_id: UUID | None = None

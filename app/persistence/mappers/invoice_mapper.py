@@ -187,6 +187,7 @@ class InvoiceMapper:
             gross_total=orm.gross_amount,
             sort_order=orm.sort_order,
             vat_amount_pln=orm.vat_amount_pln,
+            product_id=orm.product_id,
         )
 
     @staticmethod
@@ -204,6 +205,7 @@ class InvoiceMapper:
             gross_amount=item.gross_total,
             sort_order=item.sort_order,
             vat_amount_pln=item.vat_amount_pln,
+            product_id=item.product_id,
         )
 
     @staticmethod

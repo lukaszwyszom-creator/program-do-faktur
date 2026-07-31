@@ -59,6 +59,14 @@ class StockORM(Base):
 
 class StockMovementORM(Base):
     __tablename__ = "stock_movements"
+    __table_args__ = (
+        # Idempotencja księgowania: jeden ruch danego typu na pozycję faktury
+        UniqueConstraint(
+            "invoice_item_id",
+            "movement_type",
+            name="uq_stock_movement_invoice_item_type",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_id: Mapped[uuid.UUID] = mapped_column(
@@ -71,6 +79,12 @@ class StockMovementORM(Base):
     quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    invoice_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("invoice_items.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

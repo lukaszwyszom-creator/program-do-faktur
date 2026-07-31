@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { contractorsApi } from '../../api/contractors';
+import { stockApi } from '../../api/stock';
 import styles from './InvoiceForm.module.css';
 
 const TODAY = new Date().toISOString().split('T')[0];
 
-const EMPTY_ITEM = { name: '', quantity: '1', unit: 'szt.', unit_price_net: '', vat_rate: '23' };
+const EMPTY_ITEM = {
+  name: '',
+  quantity: '1',
+  unit: 'szt.',
+  unit_price_net: '',
+  vat_rate: '23',
+  product_id: '',
+};
 
 const VAT_RATES = ['0', '5', '8', '23', 'zw'];
 
@@ -15,6 +23,16 @@ function useDebounce(value, delay) {
     return () => clearTimeout(t);
   }, [value, delay]);
   return dv;
+}
+
+function formatProductOption(product, stockQty) {
+  const isbn = product.isbn ? ` · ISBN ${product.isbn}` : '';
+  const unit = product.unit ? ` · ${product.unit}` : '';
+  const stock =
+    stockQty === undefined || stockQty === null
+      ? ''
+      : ` · stan ${stockQty}`;
+  return `${product.name}${isbn}${unit}${stock}`;
 }
 
 /**
@@ -36,11 +54,38 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
       unit: i.unit,
       unit_price_net: String(i.unit_price_net),
       vat_rate: String(i.vat_rate),
+      product_id: i.product_id ?? '',
     })) ?? [{ ...EMPTY_ITEM }]
   );
   const [error, setError] = useState('');
+  const [products, setProducts] = useState([]);
+  const [stockByProduct, setStockByProduct] = useState({});
 
   const debouncedNip = useDebounce(buyerNip, 600);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([stockApi.listProducts(), stockApi.listStock()])
+      .then(([plist, slist]) => {
+        if (cancelled) return;
+        setProducts(Array.isArray(plist) ? plist : []);
+        const map = {};
+        for (const row of slist?.items ?? []) {
+          map[row.product_id] = row.quantity;
+        }
+        setStockByProduct(map);
+      })
+      .catch(() => {
+        // Magazyn może być wyłączony — formularz działa bez pickera produktów
+        if (!cancelled) {
+          setProducts([]);
+          setStockByProduct({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (debouncedNip.length === 10) {
@@ -63,6 +108,26 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
 
   const updateItem = (idx, field, val) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: val } : it)));
+
+  const onProductSelect = (idx, productId) => {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        if (!productId) {
+          return { ...it, product_id: '' };
+        }
+        const product = products.find((p) => p.id === productId);
+        // Nie nadpisuj nazwy bez decyzji użytkownika — tylko gdy pusta.
+        // Jednostkę uzupełnij tylko gdy pusta.
+        return {
+          ...it,
+          product_id: productId,
+          name: it.name.trim() ? it.name : (product?.name ?? it.name),
+          unit: it.unit.trim() ? it.unit : (product?.unit ?? it.unit),
+        };
+      })
+    );
+  };
 
   const calcNet = (it) => {
     const q = parseFloat(it.quantity) || 0;
@@ -90,6 +155,7 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
       unit: it.unit || 'szt.',
       unit_price_net: parseFloat(it.unit_price_net),
       vat_rate: it.vat_rate === 'zw' ? 0 : parseFloat(it.vat_rate),
+      product_id: it.product_id || null,
     }));
 
     if (parsedItems.some((i) => isNaN(i.quantity) || isNaN(i.unit_price_net))) {
@@ -115,7 +181,6 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
     <form className={styles.form} onSubmit={handleSubmit}>
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* Nagłówek faktury */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Nabywca</h3>
         <div className={styles.grid2}>
@@ -144,7 +209,6 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
         </div>
       </div>
 
-      {/* Daty */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Daty i waluta</h3>
         <div className={styles.grid3}>
@@ -184,7 +248,6 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
         </div>
       </div>
 
-      {/* Pozycje */}
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
           <h3 className={styles.sectionTitle}>Pozycje faktury</h3>
@@ -194,12 +257,31 @@ export default function InvoiceForm({ initial = null, onSubmit, loading = false 
         </div>
 
         <div className={styles.itemsHeader}>
-          <span>Nazwa</span><span>Ilość</span><span>J.m.</span>
-          <span>Cena netto</span><span>VAT %</span><span>Netto suma</span><span></span>
+          <span>Produkt mag.</span>
+          <span>Nazwa</span>
+          <span>Ilość</span>
+          <span>J.m.</span>
+          <span>Cena netto</span>
+          <span>VAT %</span>
+          <span>Netto suma</span>
+          <span></span>
         </div>
 
         {items.map((it, idx) => (
           <div key={idx} className={styles.itemRow}>
+            <select
+              className="select"
+              value={it.product_id}
+              onChange={(e) => onProductSelect(idx, e.target.value)}
+              title="Puste = pozycja usługowa (bez magazynu)"
+            >
+              <option value="">— Usługa / bez magazynu —</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {formatProductOption(p, stockByProduct[p.id])}
+                </option>
+              ))}
+            </select>
             <input
               className="input"
               placeholder="Nazwa usługi/towaru"

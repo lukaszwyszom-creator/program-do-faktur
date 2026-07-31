@@ -142,11 +142,25 @@ class StockRepository:
             movement_type=movement.movement_type.value,
             quantity=movement.quantity,
             invoice_id=movement.invoice_id,
+            invoice_item_id=movement.invoice_item_id,
             note=movement.note,
         )
         self.session.add(orm)
         self.session.flush()
         return movement
+
+    def find_movement_by_invoice_item(
+        self,
+        *,
+        invoice_item_id: UUID,
+        movement_type: MovementType,
+    ) -> StockMovement | None:
+        orm = self.session.execute(
+            select(StockMovementORM)
+            .where(StockMovementORM.invoice_item_id == invoice_item_id)
+            .where(StockMovementORM.movement_type == movement_type.value)
+        ).scalar_one_or_none()
+        return self._movement_to_domain(orm) if orm else None
 
     def list_movements(
         self,
@@ -207,6 +221,7 @@ class StockRepository:
             movement_type=MovementType(orm.movement_type),
             quantity=Decimal(str(orm.quantity)),
             invoice_id=orm.invoice_id,
+            invoice_item_id=orm.invoice_item_id,
             note=orm.note,
             created_at=orm.created_at,
         )

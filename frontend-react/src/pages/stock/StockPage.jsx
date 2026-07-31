@@ -7,7 +7,6 @@ const MOVEMENT_LABELS = {
   PURCHASE: 'Zakup',
   SALE: 'Sprzedaż',
   ADJUSTMENT: 'Korekta',
-  TRANSFER: 'Transfer',
 };
 
 // Maska ISBN: xxx-xx-xxxxxx-x-x  (13 cyfr + 4 myślniki)

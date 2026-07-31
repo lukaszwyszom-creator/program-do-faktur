@@ -93,6 +93,15 @@ class StockMovementCreateRequest(BaseModel):
             raise ValueError("Ilość musi być większa od 0.")
         return v
 
+    @field_validator("movement_type")
+    @classmethod
+    def movement_type_allowed(cls, v: MovementType) -> MovementType:
+        if v == MovementType.TRANSFER:
+            raise ValueError(
+                "Typ ruchu TRANSFER jest tymczasowo niedostępny."
+            )
+        return v
+
 
 class StockMovementResponse(BaseModel):
     id: UUID
@@ -101,6 +110,7 @@ class StockMovementResponse(BaseModel):
     movement_type: MovementType
     quantity: Decimal
     invoice_id: UUID | None
+    invoice_item_id: UUID | None = None
     note: str | None
     created_at: datetime
 
@@ -113,6 +123,7 @@ class StockMovementResponse(BaseModel):
             movement_type=m.movement_type,
             quantity=m.quantity,
             invoice_id=m.invoice_id,
+            invoice_item_id=m.invoice_item_id,
             note=m.note,
             created_at=m.created_at,
         )

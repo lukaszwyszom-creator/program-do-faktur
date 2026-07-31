@@ -39,6 +39,8 @@ class InvoiceItem:
     id: UUID | None = None
     # kwota VAT przeliczona na PLN (wymagana przez FA(3) gdy currency != PLN)
     vat_amount_pln: Decimal | None = None
+    # Opcjonalne powiązanie z produktem magazynowym (None = pozycja usługowa)
+    product_id: UUID | None = None
 
 
 @dataclass(slots=True)

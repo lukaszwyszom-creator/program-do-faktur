@@ -14,6 +14,7 @@ class InvoiceItemInput(BaseModel):
     unit: str
     unit_price_net: Decimal
     vat_rate: Decimal
+    product_id: UUID | None = None
 
 
 class InvoiceCreateRequest(BaseModel):
@@ -43,6 +44,7 @@ class InvoiceItemResponse(BaseModel):
     vat_total: Decimal
     gross_total: Decimal
     sort_order: int
+    product_id: UUID | None = None
 
     @classmethod
     def from_domain(cls, item: InvoiceItem) -> "InvoiceItemResponse":
@@ -57,6 +59,7 @@ class InvoiceItemResponse(BaseModel):
             vat_total=item.vat_total,
             gross_total=item.gross_total,
             sort_order=item.sort_order,
+            product_id=item.product_id,
         )
 
 
